@@ -1274,6 +1274,7 @@ function ScanFlow({
   const [thumb, setThumb] = useState("");
   const [backPreviewUrl, setBackPreviewUrl] = useState("");
   const [backB64, setBackB64] = useState("");
+  const [compNote, setCompNote] = useState("");
   const [spec, setSpec] = useState(null);
   const [comp, setComp] = useState(null);
   const [price, setPrice] = useState(0);
@@ -1291,6 +1292,7 @@ function ScanFlow({
     setThumb("");
     setBackPreviewUrl("");
     setBackB64("");
+    setCompNote("");
     setSpec(null);
     setComp(null);
     setPrice(0);
@@ -1411,9 +1413,11 @@ function ScanFlow({
   async function findComps() {
     setBusy("comps");
     setErr("");
-    const query = spec.compQuery || [spec.year, spec.brand, spec.set, spec.player, spec.cardNumber, spec.variation].filter(Boolean).join(" ");
-    const searchPrompt = "You are a sports-card market analyst. Search the web for recent eBay SOLD / completed listings AND the price trend for this card: \"" + query + "\". " + "Consider how the market for this player/set/year has moved recently. Then respond with ONLY a JSON object (no markdown) with keys: " + "suggestedPrice (number USD, fair list price), low (number), high (number), sampleSize (integer), " + "confidence ('low'|'medium'|'high'), comps (array of up to 6 {title, price (number), note}), summary (one sentence), " + "trend ('up'|'down'|'flat'), trendPct (number), trendWindow (string e.g. '90 days'), trendNote (one short sentence), " + "lastSold ({price (number), date (string), note (string)}), recommendation (one short, actionable sentence). " + "If solid data isn't found, estimate conservatively, set confidence='low' and trend='flat'.";
-    const estimatePrompt = "You cannot browse the web. From your own knowledge of the sports-card market, estimate the current resale value for this card: \"" + query + "\". " + "Be conservative. Respond with ONLY a JSON object (no markdown) with keys: suggestedPrice (number USD), low (number), high (number), " + "sampleSize (0), confidence ('low'), comps ([]), summary (one sentence), trend ('up'|'down'|'flat'), trendPct (number), trendWindow (string), " + "trendNote (one short sentence), lastSold (null), recommendation (one short sentence).";
+    const noteStr = (compNote || "").trim();
+    const noteClause = noteStr ? " IMPORTANT detail from the seller that the comps MUST match: \"" + noteStr + "\". If this indicates a serial print run (e.g. /25), only use sold listings of that exact print run - do not substitute other numbered parallels (e.g. /499) or the base card. " : "";
+    const query = (spec.compQuery || [spec.year, spec.brand, spec.set, spec.player, spec.cardNumber, spec.variation].filter(Boolean).join(" ")) + (noteStr ? " " + noteStr : "");
+    const searchPrompt = "You are a sports-card market analyst. Search the web for recent eBay SOLD / completed listings AND the price trend for this card: \"" + query + "\". " + noteClause + "Consider how the market for this player/set/year has moved recently. Then respond with ONLY a JSON object (no markdown) with keys: " + "suggestedPrice (number USD, fair list price), low (number), high (number), sampleSize (integer), " + "confidence ('low'|'medium'|'high'), comps (array of up to 6 {title, price (number), note}), summary (one sentence), " + "trend ('up'|'down'|'flat'), trendPct (number), trendWindow (string e.g. '90 days'), trendNote (one short sentence), " + "lastSold ({price (number), date (string), note (string)}), recommendation (one short, actionable sentence), refImageUrl (a direct public https URL to a clear image of THIS exact card from a sold listing or card catalog; empty string if unsure). " + "If solid data isn't found, estimate conservatively, set confidence='low' and trend='flat'.";
+    const estimatePrompt = "You cannot browse the web. From your own knowledge of the sports-card market, estimate the current resale value for this card: \"" + query + "\". " + noteClause + "Be conservative. Respond with ONLY a JSON object (no markdown) with keys: suggestedPrice (number USD), low (number), high (number), " + "sampleSize (0), confidence ('low'), comps ([]), summary (one sentence), trend ('up'|'down'|'flat'), trendPct (number), trendWindow (string), " + "trendNote (one short sentence), lastSold (null), recommendation (one short sentence), refImageUrl ('').";
     let j = null,
       estimateOnly = false,
       firstErr = "";
@@ -1468,6 +1472,7 @@ function ScanFlow({
       trendWindow: j.trendWindow || "",
       trendNote: j.trendNote || "",
       recommendation: j.recommendation || "",
+      refImageUrl: j.refImageUrl || "",
       lastSold: j.lastSold && j.lastSold.price ? {
         price: round2(Number(j.lastSold.price)),
         date: j.lastSold.date || "recent",
@@ -1833,7 +1838,15 @@ function ScanFlow({
   }, React.createElement("label", null, "Condition"), React.createElement("input", {
     value: spec.conditionEstimate,
     onChange: e => setField("conditionEstimate", e.target.value)
-  })))), step === "identified" && React.createElement("div", {
+  })))), React.createElement("div", {
+    className: "section"
+  }, React.createElement("div", {
+    className: "field full"
+  }, React.createElement("label", null, "Notes for comp search (optional)"), React.createElement("input", {
+    value: compNote,
+    placeholder: "e.g. numbered /25, sticker auto, short print",
+    onChange: e => setCompNote(e.target.value)
+  }))), step === "identified" && React.createElement("div", {
     className: "section",
     style: {
       display: "flex",
@@ -2056,6 +2069,50 @@ function MarketRead({
   }, React.createElement("span", {
     className: "live-dot"
   }), "Live AI market read"), React.createElement("div", {
+    className: "compcheck",
+    style: {
+      display: "flex",
+      gap: 11,
+      alignItems: "flex-start",
+      marginBottom: 12
+    }
+  }, comp.refImageUrl ? React.createElement("img", {
+    src: comp.refImageUrl,
+    alt: "comped card",
+    style: {
+      width: 64,
+      height: 90,
+      objectFit: "cover",
+      borderRadius: 8,
+      flexShrink: 0,
+      border: "1px solid var(--hairline)",
+      background: "#000"
+    },
+    onError: e => {
+      e.target.style.display = "none";
+    }
+  }) : null, React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      lineHeight: 1.45
+    }
+  }, "Verify the match: this is the card these comps are for. Open the real sold listings to compare photos with yours."), React.createElement("a", {
+    className: "lnk",
+    href: "https://www.ebay.com/sch/i.html?_nkw=" + encodeURIComponent(comp.query || "") + "&LH_Sold=1&LH_Complete=1",
+    target: "_blank",
+    rel: "noreferrer",
+    style: {
+      display: "inline-block",
+      marginTop: 6,
+      fontSize: 12.5
+    }
+  }, "View sold listings on eBay \u2197"))), React.createElement("div", {
     className: "trend-row"
   }, React.createElement("div", {
     className: "trend-ic trend-" + tr
