@@ -3071,4 +3071,102 @@ function SetupSheet({
     n: 3,
     done: ebayDone,
     title: "Connect eBay (to list for real)"
-  }, "Req
+  }, "Requires the backend deployed with your eBay app keys (in the download). Once it's live, tap below to authorize on eBay — then listing a card publishes it for real.", React.createElement("button", {
+    className: "btn btn-indigo",
+    style: {
+      marginTop: 11
+    },
+    onClick: onConnectEbay
+  }, React.createElement(Link2, {
+    size: 15
+  }), " ", ebayDone ? "eBay connected ✓" : "Connect eBay")), React.createElement("button", {
+    className: "btn btn-ghost",
+    style: {
+      marginTop: 16
+    },
+    onClick: onClose
+  }, "Got it"), React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--faint)",
+      marginTop: 10,
+      textAlign: "center"
+    }
+  }, "Reopen anytime by tapping the CardFlip logo.")));
+}
+function ConnectSheet({
+  settings,
+  onClose
+}) {
+  return React.createElement("div", {
+    className: "scrim",
+    onClick: onClose
+  }, React.createElement("div", {
+    className: "sheet",
+    onClick: e => e.stopPropagation()
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start"
+    }
+  }, React.createElement("h2", null, "Connect eBay"), React.createElement("button", {
+    className: "btn btn-ghost btn-sm",
+    onClick: onClose,
+    style: {
+      width: "auto"
+    }
+  }, React.createElement(X, {
+    size: 16
+  }))), settings.ebayConnected ? React.createElement(React.Fragment, null, React.createElement("div", {
+    className: "note",
+    style: {
+      marginTop: 14
+    }
+  }, React.createElement(ShieldCheck, {
+    className: "ic",
+    size: 16,
+    style: {
+      color: "var(--money)"
+    }
+  }), React.createElement("span", null, "Your eBay seller account is linked. Listing a card publishes it live on eBay.")), React.createElement("button", {
+    className: "btn btn-ghost",
+    style: {
+      marginTop: 16,
+      color: "var(--danger)"
+    },
+    onClick: () => {
+      window.location.href = EBAY.logout;
+    }
+  }, "Disconnect eBay")) : React.createElement(React.Fragment, null, React.createElement("p", {
+    style: {
+      color: "var(--muted)",
+      fontSize: 13.5,
+      lineHeight: 1.55,
+      marginTop: 10
+    }
+  }, "You authorize CardFlip on eBay's own login page — your password never touches the app. eBay sends back a secure token (stored on your own server) that lets the app publish listings for you."), React.createElement("button", {
+    className: "btn btn-money",
+    style: {
+      marginTop: 16
+    },
+    onClick: () => {
+      window.location.href = EBAY.login;
+    }
+  }, React.createElement(Link2, {
+    size: 16
+  }), " Authorize on eBay"), React.createElement("div", {
+    className: "note warn",
+    style: {
+      marginTop: 14
+    }
+  }, React.createElement(AlertTriangle, {
+    className: "ic",
+    size: 15
+  }), React.createElement("span", null, "This needs the backend deployed with your eBay app keys (see the setup guide — tap the CardFlip logo). Until then this button won't reach eBay.")))));
+}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App, null));
+</script>
+</body>
+</html>
