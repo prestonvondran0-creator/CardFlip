@@ -1272,12 +1272,16 @@ function ScanFlow({
   const [previewUrl, setPreviewUrl] = useState("");
   const [aiB64, setAiB64] = useState("");
   const [thumb, setThumb] = useState("");
+  const [backPreviewUrl, setBackPreviewUrl] = useState("");
+  const [backB64, setBackB64] = useState("");
   const [spec, setSpec] = useState(null);
   const [comp, setComp] = useState(null);
   const [price, setPrice] = useState(0);
   const [cost, setCost] = useState("");
   const fileRef = useRef(null);
   const camRef = useRef(null);
+  const backFileRef = useRef(null);
+  const backCamRef = useRef(null);
   const reset = () => {
     setStep("idle");
     setBusy(null);
@@ -1285,6 +1289,8 @@ function ScanFlow({
     setPreviewUrl("");
     setAiB64("");
     setThumb("");
+    setBackPreviewUrl("");
+    setBackB64("");
     setSpec(null);
     setComp(null);
     setPrice(0);
@@ -1338,24 +1344,45 @@ function ScanFlow({
       setErr("Couldn't read that image. Try another photo.");
     }
   }
+  async function handleBackFile(file) {
+    if (!file) return;
+    setErr("");
+    try {
+      setBackPreviewUrl(URL.createObjectURL(file));
+      const big = await downscale(file, 1024, 0.85);
+      setBackB64(big.split(",")[1]);
+    } catch {
+      setErr("Couldn't read that back-of-card photo. Try another.");
+    }
+  }
   async function identify() {
     setBusy("reading");
     setErr("");
     try {
-      const prompt = "You are an expert sports-card cataloguer and grader. Identify this trading card as precisely as you can from the image. " + "Respond with ONLY a JSON object (no markdown, no commentary) using these keys: " + "identified (boolean), sport, player, year, brand, set, cardNumber, variation (parallel/insert/refractor name or ''), " + "team, isRookie (boolean), conditionEstimate (short, e.g. 'Raw — Near Mint'), conditionNotes (short), " + "compQuery (a precise eBay search string to find recent SOLD comps: include player, year, brand, set, card number, variation). " + "If unreadable, set identified=false and fill best partial guesses.";
+      const prompt = "You are an expert sports-card cataloguer and grader. Identify this trading card as precisely as you can from the image(s). The first image is the FRONT of the card; if a second image is provided it is the BACK — use it to confirm card number, set, year, and any serial numbering. " + "Respond with ONLY a JSON object (no markdown, no commentary) using these keys: " + "identified (boolean), sport, player, year, brand, set, cardNumber, variation (parallel/insert/refractor name or ''), " + "team, isRookie (boolean), conditionEstimate (short, e.g. 'Raw — Near Mint'), conditionNotes (short), " + "compQuery (a precise eBay search string to find recent SOLD comps: include player, year, brand, set, card number, variation). " + "If unreadable, set identified=false and fill best partial guesses.";
+      const content = [{
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/jpeg",
+          data: aiB64
+        }
+      }];
+      if (backB64) content.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/jpeg",
+          data: backB64
+        }
+      });
+      content.push({
+        type: "text",
+        text: prompt
+      });
       const text = await anthropic([{
         role: "user",
-        content: [{
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: "image/jpeg",
-            data: aiB64
-          }
-        }, {
-          type: "text",
-          text: prompt
-        }]
+        content
       }]);
       const j = extractJSON(text);
       setSpec({
@@ -1613,7 +1640,75 @@ function ScanFlow({
     }, React.createElement("img", {
       src: previewUrl,
       alt: "card"
-    })), err && React.createElement("div", {
+    })), React.createElement("div", {
+      className: "section"
+    }, React.createElement("p", {
+      className: "eyebrow",
+      style: {
+        marginBottom: 10
+      }
+    }, "Back of card (optional)"), React.createElement("p", {
+      style: {
+        color: "var(--muted)",
+        fontSize: 12.5,
+        lineHeight: 1.5,
+        marginBottom: 10
+      }
+    }, "Adding the back helps confirm the card #, set and year — and finds more accurate comps."), backPreviewUrl ? React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 12,
+        alignItems: "flex-start"
+      }
+    }, React.createElement("div", {
+      className: "preview-wrap",
+      style: {
+        width: 96,
+        flexShrink: 0
+      }
+    }, React.createElement("img", {
+      src: backPreviewUrl,
+      alt: "card back",
+      style: {
+        maxHeight: 132
+      }
+    })), React.createElement("button", {
+      className: "btn btn-ghost",
+      style: {
+        width: "auto"
+      },
+      onClick: () => {
+        setBackPreviewUrl("");
+        setBackB64("");
+      }
+    }, React.createElement(RotateCcw, {
+      size: 15
+    }), " Replace back")) : React.createElement("div", {
+      className: "cap-row"
+    }, React.createElement("button", {
+      className: "btn btn-ghost",
+      onClick: () => backCamRef.current?.click()
+    }, React.createElement(Camera, {
+      size: 16
+    }), " Back photo"), React.createElement("button", {
+      className: "btn btn-ghost",
+      onClick: () => backFileRef.current?.click()
+    }, React.createElement(Upload, {
+      size: 16
+    }), " Upload back"))), React.createElement("input", {
+      ref: backCamRef,
+      type: "file",
+      accept: "image/*",
+      capture: "environment",
+      hidden: true,
+      onChange: e => handleBackFile(e.target.files?.[0])
+    }), React.createElement("input", {
+      ref: backFileRef,
+      type: "file",
+      accept: "image/*",
+      hidden: true,
+      onChange: e => handleBackFile(e.target.files?.[0])
+    }), err && React.createElement("div", {
       className: "note warn section"
     }, React.createElement(AlertTriangle, {
       className: "ic",
@@ -2859,7 +2954,15 @@ function SettingsSheet({
   }, React.createElement(AlertTriangle, {
     className: "ic",
     size: 15
-  }), React.createElement("span", null, "Your key is saved only on this device and used only for direct calls to Anthropic. That's fine for your own use — but for an app you give to other people, the key belongs on a server, never in the browser. Create a key at console.anthropic.com."))));
+  }), React.createElement("span", null, "Your key is saved only on this device and used only for direct calls to Anthropic. That's fine for your own use — but for an app you give to other people, the key belongs on a server, never in the browser. Create a key at console.anthropic.com.")), connected && React.createElement("button", {
+    className: "btn btn-money",
+    style: {
+      marginTop: 12
+    },
+    onClick: onClose
+  }, React.createElement(Check, {
+    size: 16
+  }), " Done — back to app")));
 }
 function SetupSheet({
   settings,
@@ -2968,102 +3071,4 @@ function SetupSheet({
     n: 3,
     done: ebayDone,
     title: "Connect eBay (to list for real)"
-  }, "Requires the backend deployed with your eBay app keys (in the download). Once it's live, tap below to authorize on eBay — then listing a card publishes it for real.", React.createElement("button", {
-    className: "btn btn-indigo",
-    style: {
-      marginTop: 11
-    },
-    onClick: onConnectEbay
-  }, React.createElement(Link2, {
-    size: 15
-  }), " ", ebayDone ? "eBay connected ✓" : "Connect eBay")), React.createElement("button", {
-    className: "btn btn-ghost",
-    style: {
-      marginTop: 16
-    },
-    onClick: onClose
-  }, "Got it"), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--faint)",
-      marginTop: 10,
-      textAlign: "center"
-    }
-  }, "Reopen anytime by tapping the CardFlip logo.")));
-}
-function ConnectSheet({
-  settings,
-  onClose
-}) {
-  return React.createElement("div", {
-    className: "scrim",
-    onClick: onClose
-  }, React.createElement("div", {
-    className: "sheet",
-    onClick: e => e.stopPropagation()
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "flex-start"
-    }
-  }, React.createElement("h2", null, "Connect eBay"), React.createElement("button", {
-    className: "btn btn-ghost btn-sm",
-    onClick: onClose,
-    style: {
-      width: "auto"
-    }
-  }, React.createElement(X, {
-    size: 16
-  }))), settings.ebayConnected ? React.createElement(React.Fragment, null, React.createElement("div", {
-    className: "note",
-    style: {
-      marginTop: 14
-    }
-  }, React.createElement(ShieldCheck, {
-    className: "ic",
-    size: 16,
-    style: {
-      color: "var(--money)"
-    }
-  }), React.createElement("span", null, "Your eBay seller account is linked. Listing a card publishes it live on eBay.")), React.createElement("button", {
-    className: "btn btn-ghost",
-    style: {
-      marginTop: 16,
-      color: "var(--danger)"
-    },
-    onClick: () => {
-      window.location.href = EBAY.logout;
-    }
-  }, "Disconnect eBay")) : React.createElement(React.Fragment, null, React.createElement("p", {
-    style: {
-      color: "var(--muted)",
-      fontSize: 13.5,
-      lineHeight: 1.55,
-      marginTop: 10
-    }
-  }, "You authorize CardFlip on eBay's own login page — your password never touches the app. eBay sends back a secure token (stored on your own server) that lets the app publish listings for you."), React.createElement("button", {
-    className: "btn btn-money",
-    style: {
-      marginTop: 16
-    },
-    onClick: () => {
-      window.location.href = EBAY.login;
-    }
-  }, React.createElement(Link2, {
-    size: 16
-  }), " Authorize on eBay"), React.createElement("div", {
-    className: "note warn",
-    style: {
-      marginTop: 14
-    }
-  }, React.createElement(AlertTriangle, {
-    className: "ic",
-    size: 15
-  }), React.createElement("span", null, "This needs the backend deployed with your eBay app keys (see the setup guide — tap the CardFlip logo). Until then this button won't reach eBay.")))));
-}
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(App, null));
-</script>
-</body>
-</html>
+  }, "Req
