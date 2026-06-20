@@ -781,6 +781,48 @@ async function downscale(file, maxDim, quality) {
   URL.revokeObjectURL(url);
   return c.toDataURL("image/jpeg", quality);
 }
+function _clamp8(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+async function enhanceImage(dataUrl) {
+  try {
+    const img = await loadImage(dataUrl);
+    const w = img.width, h = img.height;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+    const id = ctx.getImageData(0, 0, w, h);
+    const d = id.data;
+    let rs = 0, gs = 0, bs = 0;
+    const n = d.length / 4;
+    for (let i = 0; i < d.length; i += 4) { rs += d[i]; gs += d[i + 1]; bs += d[i + 2]; }
+    const ra = rs / n, ga = gs / n, ba = bs / n, avg = (ra + ga + ba) / 3;
+    const kr = ra ? avg / ra : 1, kg = ga ? avg / ga : 1, kb = ba ? avg / ba : 1;
+    const contrast = 1.12, sat = 1.12;
+    for (let i = 0; i < d.length; i += 4) {
+      let r = d[i] * kr, g = d[i + 1] * kg, b = d[i + 2] * kb;
+      r = (r - 128) * contrast + 128; g = (g - 128) * contrast + 128; b = (b - 128) * contrast + 128;
+      const gray = r * 0.299 + g * 0.587 + b * 0.114;
+      r = gray + (r - gray) * sat; g = gray + (g - gray) * sat; b = gray + (b - gray) * sat;
+      d[i] = _clamp8(r); d[i + 1] = _clamp8(g); d[i + 2] = _clamp8(b);
+    }
+    const src = Uint8ClampedArray.from(d);
+    const a = 0.45;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const o = (y * w + x) * 4;
+        for (let ch = 0; ch < 3; ch++) {
+          const k = o + ch;
+          const v = (1 + 4 * a) * src[k] - a * (src[k - 4] + src[k + 4] + src[k - w * 4] + src[k + w * 4]);
+          d[k] = _clamp8(v);
+        }
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return c.toDataURL("image/jpeg", 0.9);
+  } catch {
+    return dataUrl;
+  }
+}
 function extractJSON(text) {
   let t = text.replace(/```json/gi, "").replace(/```/g, "").trim();
   const s = t.indexOf("{"),
@@ -1275,6 +1317,12 @@ function ScanFlow({
   const [backPreviewUrl, setBackPreviewUrl] = useState("");
   const [backB64, setBackB64] = useState("");
   const [compNote, setCompNote] = useState("");
+  const [frontOrig, setFrontOrig] = useState("");
+  const [frontEnhanced, setFrontEnhanced] = useState("");
+  const [frontChoice, setFrontChoice] = useState("enhanced");
+  const [bgRemoved, setBgRemoved] = useState("");
+  const [bgBusy, setBgBusy] = useState(false);
+  const [bgMsg, setBgMsg] = useState("");
   const [spec, setSpec] = useState(null);
   const [comp, setComp] = useState(null);
   const [price, setPrice] = useState(0);
@@ -1293,6 +1341,12 @@ function ScanFlow({
     setBackPreviewUrl("");
     setBackB64("");
     setCompNote("");
+    setFrontOrig("");
+    setFrontEnhanced("");
+    setFrontChoice("enhanced");
+    setBgRemoved("");
+    setBgBusy(false);
+    setBgMsg("");
     setSpec(null);
     setComp(null);
     setPrice(0);
@@ -1341,7 +1395,12 @@ function ScanFlow({
       const small = await downscale(file, 360, 0.7);
       setAiB64(big.split(",")[1]);
       setThumb(small);
+      setFrontOrig(big);
+      setBgRemoved("");
+      setBgMsg("");
+      setFrontChoice("enhanced");
       setStep("preview");
+      setFrontEnhanced(await enhanceImage(big));
     } catch {
       setErr("Couldn't read that image. Try another photo.");
     }
@@ -1487,6 +1546,14 @@ function ScanFlow({
     setBusy(null);
   }
   async function save(asListed) {
+    setBusy(asListed ? "publishing" : "saving");
+    setErr("");
+    const frontImg = frontChoice === "nobg" ? bgRemoved : frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig);
+    const imageUrls = [];
+    try {
+      if (frontImg) { const u = await hostImage(frontImg); if (u) imageUrls.push(u); }
+      if (backB64) { const u2 = await hostImage("data:image/jpeg;base64," + backB64); if (u2) imageUrls.push(u2); }
+    } catch (e) {}
     const title = [spec.year, spec.brand, spec.set, spec.player, spec.variation, spec.isRookie ? "RC" : ""].filter(Boolean).join(" ");
     const base = {
       ...spec,
@@ -1494,14 +1561,14 @@ function ScanFlow({
       ...comp,
       price: round2(Number(price) || 0),
       title,
+      imageUrls,
+      imageUrl: imageUrls[0] || "",
       cost: Number(cost) > 0 ? round2(Number(cost)) : null,
       acquiredDate: new Date().toISOString(),
       createdDate: new Date().toISOString(),
       id: Date.now() + "" + Math.floor(Math.random() * 999)
     };
     if (asListed) {
-      setBusy("publishing");
-      setErr("");
       try {
         const r = await ebayPublish(base);
         onSave({
@@ -1530,6 +1597,26 @@ function ScanFlow({
   }));
   const applyMk = pct => setPrice(p => round2((Number(p) || 0) * (1 + pct / 100)));
   const to99 = () => setPrice(p => Math.max(0, Math.floor(Number(p) || 0) + 0.99));
+  const chosenFrontUrl = frontChoice === "nobg" ? bgRemoved : frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig || previewUrl);
+  async function hostImage(dataUrl) {
+    try {
+      const r = await fetch("/.netlify/functions/image-store", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }) });
+      const j = await r.json();
+      return r.ok && j.url ? j.url : null;
+    } catch { return null; }
+  }
+  async function doRemoveBg() {
+    const baseImg = frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig);
+    if (!baseImg) return;
+    setBgBusy(true); setBgMsg("");
+    try {
+      const r = await fetch("/.netlify/functions/bg-remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl: baseImg }) });
+      const j = await r.json();
+      if (r.ok && j.dataUrl) { setBgRemoved(j.dataUrl); setFrontChoice("nobg"); }
+      else setBgMsg(j.error || "Couldn't remove the background.");
+    } catch (e) { setBgMsg("Couldn't reach the background remover."); }
+    finally { setBgBusy(false); }
+  }
   if (busy === "reading") return React.createElement(Spinner, {
     label: "Reading the card…",
     sub: "Identifying player, set, parallel and condition"
@@ -1541,6 +1628,10 @@ function ScanFlow({
   if (busy === "publishing") return React.createElement(Spinner, {
     label: "Publishing to eBay…",
     sub: "Creating the live listing on your account"
+  });
+  if (busy === "saving") return React.createElement(Spinner, {
+    label: "Saving your card…",
+    sub: "Uploading the photo and saving to your vault"
   });
   if (step === "idle") {
     return React.createElement("div", {
@@ -1643,9 +1734,41 @@ function ScanFlow({
     }, "Confirm photo"), React.createElement("div", {
       className: "preview-wrap"
     }, React.createElement("img", {
-      src: previewUrl,
+      src: chosenFrontUrl,
       alt: "card"
     })), React.createElement("div", {
+      className: "cap-row section"
+    }, React.createElement("button", {
+      className: "btn " + (frontChoice === "enhanced" ? "btn-money" : "btn-ghost"),
+      onClick: () => setFrontChoice("enhanced")
+    }, "Enhanced"), React.createElement("button", {
+      className: "btn " + (frontChoice === "original" ? "btn-money" : "btn-ghost"),
+      onClick: () => setFrontChoice("original")
+    }, "Original"), bgRemoved && React.createElement("button", {
+      className: "btn " + (frontChoice === "nobg" ? "btn-money" : "btn-ghost"),
+      onClick: () => setFrontChoice("nobg")
+    }, "White BG")), React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "var(--muted)",
+        marginTop: 8,
+        lineHeight: 1.45
+      }
+    }, "Pick which photo to list. Enhanced fixes lighting and color; it's still a true photo of your card."), React.createElement("button", {
+      className: "btn btn-ghost section",
+      onClick: doRemoveBg,
+      disabled: bgBusy
+    }, bgBusy ? React.createElement(Loader2, {
+      size: 15,
+      className: "spin"
+    }) : React.createElement(Sparkles, {
+      size: 15
+    }), " ", bgBusy ? "Cleaning background…" : "Clean background (white)"), bgMsg && React.createElement("div", {
+      className: "note warn section"
+    }, React.createElement(AlertTriangle, {
+      className: "ic",
+      size: 15
+    }), bgMsg), React.createElement("div", {
       className: "section"
     }, React.createElement("p", {
       className: "eyebrow",

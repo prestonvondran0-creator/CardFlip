@@ -87,9 +87,10 @@ export default async (req) => {
   add("Team", card.team);
   add("Features", card.isRookie ? "Rookie" : undefined);
 
-  const imageUrls = [];
-  if (card.imageUrl) imageUrls.push(card.imageUrl);
-  else if (process.env.EBAY_PLACEHOLDER_IMAGE) imageUrls.push(process.env.EBAY_PLACEHOLDER_IMAGE);
+  let imageUrls = [];
+  if (Array.isArray(card.imageUrls)) imageUrls = card.imageUrls.filter(Boolean).slice(0, 12);
+  if (!imageUrls.length && card.imageUrl) imageUrls.push(card.imageUrl);
+  if (!imageUrls.length && process.env.EBAY_PLACEHOLDER_IMAGE) imageUrls.push(process.env.EBAY_PLACEHOLDER_IMAGE);
 
   const condition = process.env.EBAY_CONDITION || "USED_VERY_GOOD";
 
