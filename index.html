@@ -1610,12 +1610,27 @@ function ScanFlow({
     if (!baseImg) return;
     setBgBusy(true); setBgMsg("");
     try {
-      const r = await fetch("/.netlify/functions/bg-remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl: baseImg }) });
-      const j = await r.json();
-      if (r.ok && j.dataUrl) { setBgRemoved(j.dataUrl); setFrontChoice("nobg"); }
-      else setBgMsg(j.error || "Couldn't remove the background.");
-    } catch (e) { setBgMsg("Couldn't reach the background remover."); }
-    finally { setBgBusy(false); }
+      const mod = await import("https://esm.sh/@imgly/background-removal@1.6.0");
+      const removeBackground = mod.removeBackground || (mod.default && mod.default.removeBackground);
+      if (typeof removeBackground !== "function") throw new Error("loader");
+      const inBlob = await (await fetch(baseImg)).blob();
+      const outBlob = await removeBackground(inBlob, { model: "isnet_fp16", output: { format: "image/png" } });
+      const url = URL.createObjectURL(outBlob);
+      const img = await loadImage(url);
+      URL.revokeObjectURL(url);
+      const c = document.createElement("canvas");
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0);
+      setBgRemoved(c.toDataURL("image/jpeg", 0.92));
+      setFrontChoice("nobg");
+    } catch (e) {
+      setBgMsg("Background cleanup couldn't finish on this device — the Enhanced photo still looks great, sticking with that.");
+    } finally {
+      setBgBusy(false);
+    }
   }
   if (busy === "reading") return React.createElement(Spinner, {
     label: "Reading the card…",
@@ -1763,7 +1778,7 @@ function ScanFlow({
       className: "spin"
     }) : React.createElement(Sparkles, {
       size: 15
-    }), " ", bgBusy ? "Cleaning background…" : "Clean background (white)"), bgMsg && React.createElement("div", {
+    }), " ", bgBusy ? "Cleaning background… (first time loads a model)" : "Clean background (white)"), bgMsg && React.createElement("div", {
       className: "note warn section"
     }, React.createElement(AlertTriangle, {
       className: "ic",
