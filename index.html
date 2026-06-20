@@ -1838,7 +1838,7 @@ function ScanFlow({
   }, React.createElement("label", null, "Condition"), React.createElement("input", {
     value: spec.conditionEstimate,
     onChange: e => setField("conditionEstimate", e.target.value)
-  })))), React.createElement("div", {
+  })))), step === "identified" && React.createElement("div", {
     className: "section"
   }, React.createElement("div", {
     className: "field full"
@@ -1866,6 +1866,27 @@ function ScanFlow({
     price: price,
     onRefresh: findComps
   }), React.createElement("div", {
+    className: "card-surface section"
+  }, React.createElement("p", {
+    className: "eyebrow",
+    style: {
+      marginBottom: 8
+    }
+  }, "Not the right card? Re-comp with a detail"), React.createElement("div", {
+    className: "field full"
+  }, React.createElement("input", {
+    value: compNote,
+    placeholder: "e.g. numbered /25, refractor, sticker auto",
+    onChange: e => setCompNote(e.target.value)
+  })), React.createElement("button", {
+    className: "btn btn-money",
+    style: {
+      marginTop: 10
+    },
+    onClick: findComps
+  }, React.createElement(RotateCcw, {
+    size: 16
+  }), " Re-comp with this note")), React.createElement("div", {
     className: "section"
   }, React.createElement("div", {
     className: "pricechip"
