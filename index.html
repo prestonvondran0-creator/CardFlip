@@ -951,7 +951,9 @@ async function ebayPublish(card) {
       sport: card.sport,
       team: card.team,
       isRookie: card.isRookie,
-      condition: card.conditionEstimate
+      condition: card.conditionEstimate,
+      imageUrls: Array.isArray(card.imageUrls) ? card.imageUrls.filter(Boolean) : (card.imageUrl ? [card.imageUrl] : []),
+      imageUrl: card.imageUrl || ""
     })
   });
   let data = {};
