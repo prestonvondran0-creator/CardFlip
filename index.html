@@ -1482,16 +1482,28 @@ function ScanFlow({
     let j = null,
       estimateOnly = false,
       firstErr = "";
+    const _sleep = ms => new Promise(r => setTimeout(r, ms));
     try {
-      const text = await anthropic([{
-        role: "user",
-        content: searchPrompt
-      }], [{
-        type: "web_search_20250305",
-        name: "web_search",
-        max_uses: 5
-      }], 2048);
-      j = extractJSON(text);
+      let _lastE = null;
+      for (let _a = 0; _a < 3; _a++) {
+        try {
+          const text = await anthropic([{
+            role: "user",
+            content: searchPrompt
+          }], [{
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: 5
+          }], 2048);
+          j = extractJSON(text);
+          _lastE = null;
+          break;
+        } catch (_eA) {
+          _lastE = _eA;
+          if (_a < 2) await _sleep(1200 * (_a + 1));
+        }
+      }
+      if (_lastE) throw _lastE;
     } catch (e1) {
       firstErr = e1.message;
       try {
@@ -1542,7 +1554,7 @@ function ScanFlow({
       query,
       estimateOnly
     });
-    if (estimateOnly) setErr("Web search isn't enabled on your key, so this is Claude's best estimate from memory — double-check before listing. (Turn on Web Search in the Anthropic Console for live comps.)");
+    if (estimateOnly) setErr("Couldn't pull live comps this time, so this is Claude's estimate — double-check before listing. Tap \"Re-comp\" to try again.");
     setPrice(sugg);
     setStep("priced");
     setBusy(null);
