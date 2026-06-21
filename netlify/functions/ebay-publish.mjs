@@ -86,13 +86,13 @@ export default async (req) => {
   add("Sport", card.sport);
   add("Team", card.team);
   add("Features", card.isRookie ? "Rookie" : undefined);
-  const condText = String(card.condition || "").toLowerCase();
-  let cardCondition = "Near Mint or Better";
-  if (/poor|damag|creas|played|heavily/.test(condText)) cardCondition = "Poor";
-  else if (/very good|vg/.test(condText)) cardCondition = "Very Good";
-  else if (/excellent|ex/.test(condText)) cardCondition = "Excellent";
-  add("Graded", "No");
-  add("Card Condition", cardCondition);
+
+  // Trading-card REQUIRED structured condition (conditionDescriptors), mapped from the scan.
+  const _cl = String(card.condition || "").toLowerCase();
+  let cardCondValueId = "400010"; // Near mint or better (default)
+  if (/poor|played|damag|crease|heavily/.test(_cl)) cardCondValueId = "400013";
+  else if (/very good|\bvg\b/.test(_cl)) cardCondValueId = "400012";
+  else if (/excellent|\bex\b/.test(_cl)) cardCondValueId = "400011";
 
   let imageUrls = [];
   if (Array.isArray(card.imageUrls)) imageUrls = card.imageUrls.filter(Boolean).slice(0, 12);
@@ -104,6 +104,7 @@ export default async (req) => {
   const itemBody = {
     availability: { shipToLocationAvailability: { quantity: 1 } },
     condition,
+    conditionDescriptors: [{ name: "40001", values: [cardCondValueId] }],
     product: {
       title,
       description: card.description || title,

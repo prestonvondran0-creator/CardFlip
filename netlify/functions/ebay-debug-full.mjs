@@ -32,7 +32,7 @@ export default async (req) => {
   const aspects = { "Sport": ["Basketball"], "Player/Athlete": ["Victor Wembanyama"], "Season": ["2023"], "Manufacturer": ["Panini"], "Set": ["Prizm"], "Card Number": ["136"], "Graded": ["No"], "Card Condition": ["Near Mint or Better"] };
   const product = { title, description: "Debug.", aspects };
   if (imageUrl) product.imageUrls = [imageUrl];
-  const itemBody = { availability: { shipToLocationAvailability: { quantity: 1 } }, condition: "USED_VERY_GOOD", product };
+  const itemBody = { availability: { shipToLocationAvailability: { quantity: 1 } }, condition: "USED_VERY_GOOD", conditionDescriptors: [{ name: "40001", values: ["400010"] }], product };
 
   const put = await ebayFetch(`/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, { method: "PUT", token, body: itemBody });
   steps.item = { status: put.status, ok: put.ok, json: put.json };
