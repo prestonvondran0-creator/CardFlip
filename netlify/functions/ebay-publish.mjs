@@ -86,13 +86,20 @@ export default async (req) => {
   add("Sport", card.sport);
   add("Team", card.team);
   add("Features", card.isRookie ? "Rookie" : undefined);
+  const condText = String(card.condition || "").toLowerCase();
+  let cardCondition = "Near Mint or Better";
+  if (/poor|damag|creas|played|heavily/.test(condText)) cardCondition = "Poor";
+  else if (/very good|vg/.test(condText)) cardCondition = "Very Good";
+  else if (/excellent|ex/.test(condText)) cardCondition = "Excellent";
+  add("Graded", "No");
+  add("Card Condition", cardCondition);
 
   let imageUrls = [];
   if (Array.isArray(card.imageUrls)) imageUrls = card.imageUrls.filter(Boolean).slice(0, 12);
   if (!imageUrls.length && card.imageUrl) imageUrls.push(card.imageUrl);
   if (!imageUrls.length && process.env.EBAY_PLACEHOLDER_IMAGE) imageUrls.push(process.env.EBAY_PLACEHOLDER_IMAGE);
 
-  const condition = process.env.EBAY_CONDITION || "UNGRADED";
+  const condition = process.env.EBAY_CONDITION || "USED_VERY_GOOD";
 
   const itemBody = {
     availability: { shipToLocationAvailability: { quantity: 1 } },
