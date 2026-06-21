@@ -24,6 +24,7 @@ export default async (req) => {
     out.requiredAspects = asp.json.aspects
       .filter(a => a.aspectConstraint && a.aspectConstraint.aspectRequired)
       .map(a => ({ name: a.localizedAspectName, mode: a.aspectConstraint.aspectMode, values: (a.aspectValues || []).slice(0, 15).map(v => v.localizedValue) }));
+    out.allAspects = asp.json.aspects.map(a => ({ name: a.localizedAspectName, required: !!(a.aspectConstraint && a.aspectConstraint.aspectRequired), usage: a.aspectConstraint && a.aspectConstraint.aspectUsage, values: (a.aspectValues || []).slice(0, 8).map(v => v.localizedValue) }));
   } else { out.requiredAspects = { status: asp.status, body: asp.json }; }
 
   return json(out);
