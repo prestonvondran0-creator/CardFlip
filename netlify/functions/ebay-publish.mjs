@@ -87,22 +87,12 @@ export default async (req) => {
   add("Team", card.team);
   add("Features", card.isRookie ? "Rookie" : undefined);
 
-  // Trading-card required item specifics: Graded + Card Condition (mapped from scanned condition).
-  const condText = String(card.condition || "").toLowerCase();
-  let cardCondition = "Near Mint or Better";
-  if (/poor|damag|creas|played|heavily/.test(condText)) cardCondition = "Poor";
-  else if (/very good|\bvg\b/.test(condText)) cardCondition = "Very Good";
-  else if (/excellent|\bex\b/.test(condText)) cardCondition = "Excellent";
-  else if (/mint|gem|\bnm\b/.test(condText)) cardCondition = "Near Mint or Better";
-  add("Graded", "No");
-  add("Card Condition", cardCondition);
-
   let imageUrls = [];
   if (Array.isArray(card.imageUrls)) imageUrls = card.imageUrls.filter(Boolean).slice(0, 12);
   if (!imageUrls.length && card.imageUrl) imageUrls.push(card.imageUrl);
   if (!imageUrls.length && process.env.EBAY_PLACEHOLDER_IMAGE) imageUrls.push(process.env.EBAY_PLACEHOLDER_IMAGE);
 
-  const condition = process.env.EBAY_CONDITION || "USED_VERY_GOOD";
+  const condition = process.env.EBAY_CONDITION || "UNGRADED";
 
   const itemBody = {
     availability: { shipToLocationAvailability: { quantity: 1 } },
