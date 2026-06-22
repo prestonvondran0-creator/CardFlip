@@ -2904,7 +2904,11 @@ function Vault({
     className: "sub"
   }, [c.year, c.brand, c.set].filter(Boolean).join(" "), c.variation ? " · " + c.variation : ""), React.createElement("div", {
     className: "pr"
-  }, fmt(c.price))))), openCard && React.createElement(CardSheet, {
+  }, fmt(c.price)), c.cost != null && (() => {
+    const base = c.status === "sold" ? (Number(c.soldPrice || c.price) || 0) : (Number(c.price) || 0);
+    const pf = round2(netAfterFees(base) - Number(c.cost));
+    return React.createElement("div", { style: { fontSize: 11, marginTop: 3, fontWeight: 700, color: pf >= 0 ? "var(--money)" : "var(--danger)" } }, "Cost " + fmt(c.cost) + " · " + (pf >= 0 ? "+" : "") + fmt(pf) + " net");
+  })()))), openCard && React.createElement(CardSheet, {
     c: openCard,
     ebayConnected: ebayConnected,
     onConnect: onConnect,
