@@ -1420,8 +1420,17 @@ function App() {
       const serverCards = await loadVaultServer();
       if (Array.isArray(serverCards)) {
         const byId = {};
-        serverCards.forEach(c => { if (c && c.id) byId[c.id] = c; });
-        (localCards || []).forEach(c => { if (c && c.id) byId[c.id] = c; });
+        const put = (c, isServer) => {
+          if (!c || !c.id) return;
+          const ex = byId[c.id];
+          if (!ex) { byId[c.id] = c; return; }
+          const exSold = ex.status === "sold", cSold = c.status === "sold";
+          if (cSold && !exSold) { byId[c.id] = c; return; }
+          if (exSold && !cSold) return;
+          if (isServer) byId[c.id] = c; // server is the source of truth on conflicts
+        };
+        (localCards || []).forEach(c => put(c, false));
+        serverCards.forEach(c => put(c, true));
         merged = Object.values(byId).sort((a, b) => new Date(b.createdDate || b.acquiredDate || 0) - new Date(a.createdDate || a.acquiredDate || 0));
       }
       setCards(merged);
