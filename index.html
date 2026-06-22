@@ -742,6 +742,9 @@ const fmt = n => n == null || isNaN(n) ? "—" : "$" + Number(n).toLocaleString(
   maximumFractionDigits: 2
 });
 const round2 = n => Math.round(n * 100) / 100;
+// eBay economics: 13.25% final value fee + $0.40/order, minus a typical shipping cost you eat.
+const EBAY_FEE_RATE = 0.1325, EBAY_ORDER_FEE = 0.40, SHIP_EST = 4.50;
+const netAfterFees = sale => { const x = Number(sale) || 0; return x > 0 ? round2(x - (x * EBAY_FEE_RATE + EBAY_ORDER_FEE) - SHIP_EST) : 0; };
 const cardImg = c => (c && (c.thumb || c.imageUrl || (c.imageUrls && c.imageUrls[0]))) || "";
 const hasStorage = typeof window !== "undefined" && window.storage && typeof window.storage.get === "function";
 const VKEY = "cardflip-vault-v1";
@@ -2931,7 +2934,7 @@ function CardSheet({
   const [pubErr, setPubErr] = useState("");
   const mv = Number(c.suggestedPrice || c.price || 0);
   const cost = Number(costEdit) || 0;
-  const pl = cost > 0 ? mv - cost : null;
+  const pl = cost > 0 ? round2(netAfterFees(mv) - cost) : null;
   const plPct = cost > 0 ? Math.round(pl / cost * 100) : null;
   const saveCost = () => {
     const v = Number(costEdit) > 0 ? round2(Number(costEdit)) : null;
@@ -3085,7 +3088,7 @@ function CardSheet({
       fontSize: 12.5,
       color: "var(--muted)"
     }
-  }, "Unrealized · market ", fmt(mv)), React.createElement("span", {
+  }, "If sold now (after fees) · mkt ", fmt(mv)), React.createElement("span", {
     className: "plpill " + (pl >= 0 ? "pos" : "neg")
   }, pl >= 0 ? React.createElement(ArrowUpRight, {
     size: 13
@@ -3103,8 +3106,8 @@ function CardSheet({
       fontSize: 12.5,
       color: "var(--muted)"
     }
-  }, "Realized P/L"), (() => {
-    const r = (Number(c.soldPrice || c.price) || 0) - cost;
+  }, "Net P/L (after eBay fees)"), (() => {
+    const r = round2(netAfterFees(Number(c.soldPrice || c.price) || 0) - cost);
     return React.createElement("span", {
       className: "plpill " + (r >= 0 ? "pos" : "neg")
     }, r >= 0 ? "+" : "", fmt(r));
@@ -3204,9 +3207,9 @@ function Portfolio({
   const costed = holdings.filter(c => Number(c.cost) > 0);
   const investedCosted = costed.reduce((s, c) => s + Number(c.cost), 0);
   const valueCosted = costed.reduce((s, c) => s + mv(c), 0);
-  const unreal = valueCosted - investedCosted;
+  const unreal = costed.reduce((s, c) => s + (netAfterFees(mv(c)) - Number(c.cost)), 0);
   const unrealPct = investedCosted > 0 ? Math.round(unreal / investedCosted * 100) : null;
-  const realized = sold.reduce((s, c) => s + ((Number(c.soldPrice || c.price) || 0) - (Number(c.cost) || 0)), 0);
+  const realized = sold.reduce((s, c) => s + (netAfterFees(Number(c.soldPrice || c.price) || 0) - (Number(c.cost) || 0)), 0);
   const untracked = holdings.length - costed.length;
   const ranked = [...holdings].sort((a, b) => mv(b) - mv(a));
   if (cards.length === 0) {
@@ -3294,7 +3297,7 @@ function Portfolio({
     className: "mini"
   }, React.createElement("div", {
     className: "l"
-  }, "Realized P/L"), React.createElement("div", {
+  }, "Realized (after fees)"), React.createElement("div", {
     className: "v",
     style: {
       color: realized >= 0 ? "var(--money)" : "var(--danger)"
