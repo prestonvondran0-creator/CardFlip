@@ -742,6 +742,7 @@ const fmt = n => n == null || isNaN(n) ? "—" : "$" + Number(n).toLocaleString(
   maximumFractionDigits: 2
 });
 const round2 = n => Math.round(n * 100) / 100;
+const cardImg = c => (c && (c.thumb || c.imageUrl || (c.imageUrls && c.imageUrls[0]))) || "";
 const hasStorage = typeof window !== "undefined" && window.storage && typeof window.storage.get === "function";
 const VKEY = "cardflip-vault-v1";
 const SKEY = "cardflip-settings-v1";
@@ -2850,9 +2851,9 @@ function Vault({
     className: "vrow",
     key: c.id,
     onClick: () => setOpen(c.id)
-  }, c.thumb ? React.createElement("img", {
+  }, cardImg(c) ? React.createElement("img", {
     className: "vthumb",
-    src: c.thumb,
+    src: cardImg(c),
     alt: ""
   }) : React.createElement("div", {
     className: "vthumb"
@@ -2994,13 +2995,13 @@ function CardSheet({
       gap: 14,
       marginTop: 16
     }
-  }, c.thumb && React.createElement("img", {
+  }, cardImg(c) && React.createElement("img", {
     className: "vthumb",
     style: {
       width: 80,
       height: 110
     },
-    src: c.thumb,
+    src: cardImg(c),
     alt: ""
   }), React.createElement("div", {
     style: {
@@ -3304,13 +3305,13 @@ function Portfolio({
     return React.createElement("div", {
       className: "hold-row",
       key: c.id
-    }, c.thumb ? React.createElement("img", {
+    }, cardImg(c) ? React.createElement("img", {
       className: "vthumb",
       style: {
         width: 40,
         height: 56
       },
-      src: c.thumb,
+      src: cardImg(c),
       alt: ""
     }) : React.createElement("div", {
       className: "vthumb",

@@ -29,6 +29,9 @@ export default async (req) => {
     await Promise.all(items.slice(i, i + 8).map(it => getOffer(it.sku)));
   }
 
+  if (url.searchParams.get("all") === "1") {
+    return json({ items: items.map(it => { const o = offersBySku[it.sku]; return { sku: it.sku, title: (it.product && it.product.title) || "", price: o && o.pricingSummary && o.pricingSummary.price ? Number(o.pricingSummary.price.value) : 0, listingId: (o && o.listingId) || "", status: (o && o.status) || "", img: (it.product && it.product.imageUrls && it.product.imageUrls[0]) || "" }; }) });
+  }
   const cards = [];
   for (const it of items) {
     const off = offersBySku[it.sku];
