@@ -3210,6 +3210,14 @@ function Portfolio({
   const unreal = costed.reduce((s, c) => s + (netAfterFees(mv(c)) - Number(c.cost)), 0);
   const unrealPct = investedCosted > 0 ? Math.round(unreal / investedCosted * 100) : null;
   const realized = sold.reduce((s, c) => s + (netAfterFees(Number(c.soldPrice || c.price) || 0) - (Number(c.cost) || 0)), 0);
+  const realizedCost = sold.reduce((s, c) => s + (Number(c.cost) || 0), 0);
+  const realizedROI = realizedCost > 0 ? Math.round(realized / realizedCost * 100) : null;
+  const avgSold = sold.length > 0 ? realized / sold.length : null;
+  const soldNets = sold.filter(c => Number(c.cost) > 0).map(c => netAfterFees(Number(c.soldPrice || c.price) || 0) - Number(c.cost));
+  const bestFlip = soldNets.length ? Math.max.apply(null, soldNets) : null;
+  const worstFlip = soldNets.length ? Math.min.apply(null, soldNets) : null;
+  const projectedNet = unreal;
+  const stat = (l, v, col) => React.createElement("div", { className: "mini" }, React.createElement("div", { className: "l" }, l), React.createElement("div", { className: "v", style: col ? { color: col } : undefined }, v));
   const untracked = holdings.length - costed.length;
   const ranked = [...holdings].sort((a, b) => mv(b) - mv(a));
   if (cards.length === 0) {
@@ -3302,7 +3310,7 @@ function Portfolio({
     style: {
       color: realized >= 0 ? "var(--money)" : "var(--danger)"
     }
-  }, realized >= 0 ? "+" : "", fmt(realized)))), untracked > 0 && React.createElement("div", {
+  }, realized >= 0 ? "+" : "", fmt(realized)))), React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 10 } }, stat("Sold", String(sold.length)), stat("Realized ROI", realizedROI != null ? (realizedROI >= 0 ? "+" : "") + realizedROI + "%" : "\u2014", realizedROI != null ? (realizedROI >= 0 ? "var(--money)" : "var(--danger)") : undefined), stat("Avg / sale", avgSold != null ? fmt(avgSold) : "\u2014"), stat("Best flip", bestFlip != null ? fmt(bestFlip) : "\u2014", bestFlip != null ? "var(--money)" : undefined), stat("Worst flip", worstFlip != null ? fmt(worstFlip) : "\u2014", worstFlip != null && worstFlip < 0 ? "var(--danger)" : undefined), stat("If sold at list", projectedNet ? (projectedNet >= 0 ? "+" : "") + fmt(projectedNet) : "\u2014", projectedNet ? (projectedNet >= 0 ? "var(--money)" : "var(--danger)") : undefined)), React.createElement("p", { style: { fontSize: 10.5, color: "var(--faint)", marginTop: 8 } }, "All profit figures are after eBay fees (13.25% + $0.40) and ~$4.50 shipping."), untracked > 0 && React.createElement("div", {
     className: "note",
     style: {
       marginTop: 12
