@@ -6,7 +6,7 @@ export default async (req) => {
   const store = getStore("cardflip");
   if (req.method === "GET") {
     let v = null;
-    try { v = await store.get("vault", { type: "json" }); } catch (e) {}
+    try { v = await store.get("vault", { type: "json", consistency: "strong" }); } catch (e) {}
     const cards = Array.isArray(v) ? v : (v && Array.isArray(v.cards) ? v.cards : []);
     return json({ cards });
   }
