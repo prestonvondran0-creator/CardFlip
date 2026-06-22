@@ -29,6 +29,7 @@ export default async (req) => {
   const price = Number(card.price);
   if (!price || price <= 0) return fail("Missing or invalid price.");
   const title = (card.title || "Trading card").slice(0, 80);
+  const isLot = !!card.isLot;
 
   // ---- 1. Resolve seller policies (env override, else first available) ----
   let fulfillmentId = process.env.EBAY_FULFILLMENT_POLICY_ID;
@@ -72,7 +73,7 @@ export default async (req) => {
       categoryId = r.json.categorySuggestions?.[0]?.category?.categoryId;
     } catch { /* fall through to default */ }
   }
-  if (!categoryId) categoryId = "261328"; // Sports Trading Card Singles (US) — override with EBAY_CATEGORY_ID
+  if (!categoryId) categoryId = isLot ? "261329" : "261328"; // Sports Trading Card Singles (US) — override with EBAY_CATEGORY_ID
 
   // ---- 4. Build + create the inventory item ----
   const aspects = {};
@@ -99,12 +100,12 @@ export default async (req) => {
   if (!imageUrls.length && card.imageUrl) imageUrls.push(card.imageUrl);
   if (!imageUrls.length && process.env.EBAY_PLACEHOLDER_IMAGE) imageUrls.push(process.env.EBAY_PLACEHOLDER_IMAGE);
 
-  const condition = process.env.EBAY_CONDITION || "USED_VERY_GOOD";
+  const condition = process.env.EBAY_CONDITION || (isLot ? "USED_EXCELLENT" : "USED_VERY_GOOD");
 
   const itemBody = {
     availability: { shipToLocationAvailability: { quantity: 1 } },
     condition,
-    conditionDescriptors: [{ name: "40001", values: [cardCondValueId] }],
+    ...(isLot ? {} : { conditionDescriptors: [{ name: "40001", values: [cardCondValueId] }] }),
     product: {
       title,
       description: card.description || title,
