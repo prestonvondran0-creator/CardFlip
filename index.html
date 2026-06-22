@@ -746,6 +746,14 @@ const cardImg = c => (c && (c.thumb || c.imageUrl || (c.imageUrls && c.imageUrls
 const hasStorage = typeof window !== "undefined" && window.storage && typeof window.storage.get === "function";
 const VKEY = "cardflip-vault-v1";
 const SKEY = "cardflip-settings-v1";
+// Per-device CardFlip user id (multi-user namespace). Stored locally; shareable as a "CardFlip ID".
+function cfuid(){
+  try{
+    let u = localStorage.getItem('cf:uid');
+    if(!u){ u = 'u_' + ((window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g,'') : (Date.now().toString(36)+Math.random().toString(36).slice(2))); localStorage.setItem('cf:uid', u); }
+    return u;
+  }catch(e){ return ''; }
+}
 async function loadKey(k, fallback) {
   if (!hasStorage) return fallback;
   try {
@@ -762,11 +770,11 @@ async function saveKey(k, v) {
   } catch {}
 }
 async function loadVaultServer() {
-  try { const r = await fetch("/.netlify/functions/vault"); if (!r.ok) return null; const j = await r.json(); return Array.isArray(j.cards) ? j.cards : null; } catch (e) { return null; }
+  try { const r = await fetch("/.netlify/functions/vault?uid=" + encodeURIComponent(cfuid())); if (!r.ok) return null; const j = await r.json(); return Array.isArray(j.cards) ? j.cards : null; } catch (e) { return null; }
 }
 let _vaultSaveTimer = null;
 function saveVaultServer(cards) {
-  try { clearTimeout(_vaultSaveTimer); _vaultSaveTimer = setTimeout(function () { fetch("/.netlify/functions/vault", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cards: cards }) }).catch(function () {}); }, 800); } catch (e) {}
+  try { clearTimeout(_vaultSaveTimer); _vaultSaveTimer = setTimeout(function () { fetch("/.netlify/functions/vault", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: cfuid(), cards: cards }) }).catch(function () {}); }, 800); } catch (e) {}
 }
 function loadImage(src) {
   return new Promise((res, rej) => {
@@ -917,12 +925,12 @@ async function testApiKey(key) {
   return true;
 }
 const EBAY = {
-  login: "/.netlify/functions/ebay-auth?action=login",
-  logout: "/.netlify/functions/ebay-auth?action=logout"
+  get login(){ return "/.netlify/functions/ebay-auth?action=login&uid=" + encodeURIComponent(cfuid()); },
+  get logout(){ return "/.netlify/functions/ebay-auth?action=logout&uid=" + encodeURIComponent(cfuid()); }
 };
 async function ebayStatus() {
   try {
-    const r = await fetch("/.netlify/functions/ebay-status");
+    const r = await fetch("/.netlify/functions/ebay-status?uid=" + encodeURIComponent(cfuid()));
     if (!r.ok) return {
       connected: false,
       available: false
@@ -946,6 +954,7 @@ async function ebayPublish(card) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
+      uid: cfuid(),
       sku: "CF-" + card.id,
       title: (card.title || [card.year, card.brand, card.set, card.player, card.variation].filter(Boolean).join(" ")).slice(0, 80),
       price: card.price,
@@ -3508,7 +3517,7 @@ function SettingsSheet({
   }, React.createElement(AlertTriangle, {
     className: "ic",
     size: 15
-  }), React.createElement("span", null, "Your key is saved only on this device and used only for direct calls to Anthropic. That's fine for your own use — but for an app you give to other people, the key belongs on a server, never in the browser. Create a key at console.anthropic.com.")), connected && React.createElement("button", {
+  }), React.createElement("span", null, "Your key is saved only on this device and used only for direct calls to Anthropic. That's fine for your own use — but for an app you give to other people, the key belongs on a server, never in the browser. Create a key at console.anthropic.com.")), React.createElement("div", { className: "note", style: { marginTop: 18 } }, React.createElement("span", null, React.createElement("b", null, "Your CardFlip ID"), React.createElement("div", { style: { fontFamily: "monospace", fontSize: 12, wordBreak: "break-all", margin: "6px 0", color: "var(--ink)" } }, cfuid()), "Save this code. Paste it on another phone to open this same vault — or give a fresh phone its own to start clean.")), React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, React.createElement("button", { className: "btn btn-ghost btn-sm", style: { width: "auto" }, onClick: () => { try { navigator.clipboard.writeText(cfuid()); } catch (e) {} } }, "Copy ID"), React.createElement("button", { className: "btn btn-ghost btn-sm", style: { width: "auto" }, onClick: () => { const v = window.prompt("Paste a CardFlip ID to switch to that vault:"); if (v && v.trim()) { try { localStorage.setItem('cf:uid', v.trim()); } catch (e) {} location.reload(); } } }, "Restore from ID")), connected && React.createElement("button", {
     className: "btn btn-money",
     style: {
       marginTop: 12

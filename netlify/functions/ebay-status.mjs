@@ -1,10 +1,10 @@
-// /.netlify/functions/ebay-status -> { connected: boolean }
-import { getTokens } from "../../ebay-lib.mjs";
+// /.netlify/functions/ebay-status?uid=XXX -> { connected: boolean }
+import { getTokens, uidFrom } from "../../ebay-lib.mjs";
 
-export default async () => {
+export default async (req) => {
   let connected = false;
   try {
-    const t = await getTokens();
+    const t = await getTokens(uidFrom(req));
     connected = !!(t && t.refresh_token);
   } catch { connected = false; }
   return new Response(JSON.stringify({ connected }), {

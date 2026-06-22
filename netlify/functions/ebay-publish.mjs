@@ -1,7 +1,7 @@
 // /.netlify/functions/ebay-publish  (POST)
 // Body: { sku, title, price, description, player, year, brand, set, cardNumber, variation, sport, team, isRookie, condition, imageUrl }
 // Runs eBay's real 3-step Sell/Inventory flow: create inventory item -> create offer -> publish offer.
-import { getAccessToken, ebayFetch, MARKETPLACE } from "../../ebay-lib.mjs";
+import { getAccessToken, ebayFetch, MARKETPLACE, uidFrom } from "../../ebay-lib.mjs";
 
 const CURRENCY = process.env.EBAY_CURRENCY || "USD";
 
@@ -22,7 +22,7 @@ export default async (req) => {
   try { card = await req.json(); } catch { return fail("Bad JSON body"); }
 
   let token;
-  try { token = await getAccessToken(); }
+  try { token = await getAccessToken(card.uid || uidFrom(req)); }
   catch (e) { return fail("eBay not connected — connect your account first.", e.message); }
 
   const sku = (card.sku || "CF-" + Date.now()).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 50);

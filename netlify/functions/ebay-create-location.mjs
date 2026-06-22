@@ -1,7 +1,7 @@
 // /.netlify/functions/ebay-create-location  (GET or POST) — one-time helper.
 // Creates an eBay Inventory API ship-from location so listings can publish.
 // Params (query or JSON body): postalCode (or city+state), country (default US), key, name
-import { getAccessToken, ebayFetch } from "../../ebay-lib.mjs";
+import { getAccessToken, ebayFetch, uidFrom } from "../../ebay-lib.mjs";
 
 function json(o, s) {
   return new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json" } });
@@ -23,7 +23,7 @@ export default async (req) => {
   if (!postalCode && !(city && state)) return json({ error: "Provide postalCode (or city+state)" }, 400);
 
   let token;
-  try { token = await getAccessToken(); } catch (e) { return json({ error: "eBay not connected", detail: e.message }, 400); }
+  try { token = await getAccessToken(uidFrom(req)); } catch (e) { return json({ error: "eBay not connected", detail: e.message }, 400); }
 
   const address = { country };
   if (postalCode) address.postalCode = postalCode;

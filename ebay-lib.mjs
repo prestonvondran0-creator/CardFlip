@@ -1,5 +1,7 @@
 // Shared eBay helpers (token storage + refresh + API fetch).
 // Used by the Netlify functions. Holds NO secrets in code — reads them from env vars.
+// Multi-user: every seller's tokens are stored under their own uid namespace
+// (ebay_tokens:<uid>). One eBay developer app can list on behalf of many sellers.
 import { getStore } from "@netlify/blobs";
 
 export const TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
@@ -21,21 +23,27 @@ export function store() {
   return getStore("cardflip");
 }
 
-export async function getTokens() {
-  return (await store().get("ebay_tokens", { type: "json" })) || null;
+// Per-user token key. Falsy uid falls back to the legacy global key so that
+// anything created before multi-user keeps working during migration.
+function tokKey(uid) {
+  return uid ? ("ebay_tokens:" + uid) : "ebay_tokens";
 }
 
-export async function saveTokens(t) {
-  await store().setJSON("ebay_tokens", t);
+export async function getTokens(uid) {
+  return (await store().get(tokKey(uid), { type: "json" })) || null;
 }
 
-export async function clearTokens() {
-  await store().delete("ebay_tokens");
+export async function saveTokens(uid, t) {
+  await store().setJSON(tokKey(uid), t);
 }
 
-// Returns a valid access token, refreshing if needed. Throws if not connected.
-export async function getAccessToken() {
-  const t = await getTokens();
+export async function clearTokens(uid) {
+  await store().delete(tokKey(uid));
+}
+
+// Returns a valid access token for this user, refreshing if needed. Throws if not connected.
+export async function getAccessToken(uid) {
+  const t = await getTokens(uid);
   if (!t || !t.refresh_token) throw new Error("eBay not connected");
   if (t.access_token && t.expires_at && Date.now() < t.expires_at - 60000) return t.access_token;
 
@@ -52,7 +60,7 @@ export async function getAccessToken() {
   const d = await r.json();
   if (!r.ok) throw new Error("Token refresh failed: " + (d.error_description || JSON.stringify(d)));
   const next = { ...t, access_token: d.access_token, expires_at: Date.now() + d.expires_in * 1000 };
-  await saveTokens(next);
+  await saveTokens(uid, next);
   return next.access_token;
 }
 
@@ -76,3 +84,13 @@ export async function ebayFetch(path, { method = "GET", token, body, lang = "en-
 }
 
 export function exchangeBasicAuth() { return basicAuth(); }
+
+// Helper for functions: pull the uid from a request (query param or header).
+export function uidFrom(req) {
+  try {
+    const u = new URL(req.url);
+    return u.searchParams.get("uid") || req.headers.get("x-cf-uid") || "";
+  } catch {
+    return (req.headers && req.headers.get && req.headers.get("x-cf-uid")) || "";
+  }
+}
