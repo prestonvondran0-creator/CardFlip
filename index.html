@@ -1111,6 +1111,159 @@ const SAMPLES = [{
   status: "sold",
   soldPrice: 99
 }];
+const rce = React.createElement;
+async function aiIdentify(frontB64, backB64) {
+  const prompt = "You are an expert sports-card cataloguer and grader. Identify this trading card as precisely as you can from the image(s). The first image is the FRONT of the card; if a second image is provided it is the BACK — use it to confirm card number, set, year, and any serial numbering. " +
+    "Respond with ONLY a JSON object (no markdown, no commentary) using these keys: " +
+    "identified (boolean), sport, player, year, brand, set, cardNumber, variation (parallel/insert/refractor name or ''), " +
+    "team, isRookie (boolean), conditionEstimate (short, e.g. 'Raw — Near Mint'), conditionNotes (short), " +
+    "compQuery (a precise eBay search string to find recent SOLD comps: include player, year, brand, set, card number, variation). " +
+    "If unreadable, set identified=false and fill best partial guesses.";
+  const content = [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frontB64 } }];
+  if (backB64) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: backB64 } });
+  content.push({ type: "text", text: prompt });
+  const text = await anthropic([{ role: "user", content }]);
+  const j = extractJSON(text);
+  return { sport: j.sport || "", player: j.player || "", year: j.year || "", brand: j.brand || "", set: j.set || "", cardNumber: j.cardNumber || "", variation: j.variation || "", team: j.team || "", isRookie: !!j.isRookie, conditionEstimate: j.conditionEstimate || "Raw — Near Mint", conditionNotes: j.conditionNotes || "", compQuery: j.compQuery || "" };
+}
+async function aiPrice(spec, noteStr) {
+  noteStr = (noteStr || "").trim();
+  const noteClause = noteStr ? " IMPORTANT detail from the seller that the comps MUST match: \"" + noteStr + "\". If this indicates a serial print run (e.g. /25), only use sold listings of that exact print run - do not substitute other numbered parallels (e.g. /499) or the base card. " : "";
+  const query = (spec.compQuery || [spec.year, spec.brand, spec.set, spec.player, spec.cardNumber, spec.variation].filter(Boolean).join(" ")) + (noteStr ? " " + noteStr : "");
+  const searchPrompt = "You are a sports-card market analyst. Search the web for recent eBay SOLD / completed listings AND the price trend for this card: \"" + query + "\". " + noteClause + "Consider how the market has moved recently. Then respond with ONLY a JSON object (no markdown) with keys: suggestedPrice (number USD), low (number), high (number), sampleSize (integer), confidence ('low'|'medium'|'high'), comps (array of up to 6 {title, price (number), note}), summary (one sentence), trend ('up'|'down'|'flat'), trendPct (number), trendWindow (string), trendNote (one short sentence), lastSold ({price (number), date (string), note (string)}), recommendation (one short sentence), refImageUrl (a direct public https URL to an image of THIS exact card; empty string if unsure). If solid data isn't found, estimate conservatively, set confidence='low' and trend='flat'.";
+  const estimatePrompt = "You cannot browse the web. From your knowledge of the sports-card market, estimate the resale value for this card: \"" + query + "\". " + noteClause + "Be conservative. Respond with ONLY a JSON object (no markdown) with keys: suggestedPrice (number USD), low (number), high (number), sampleSize (0), confidence ('low'), comps ([]), summary (one sentence), trend ('flat'), trendPct (0), trendWindow (''), trendNote (''), lastSold (null), recommendation (one short sentence), refImageUrl ('').";
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let j = null, estimateOnly = false;
+  try {
+    let lastE = null;
+    for (let a = 0; a < 3; a++) {
+      try { const t = await anthropic([{ role: "user", content: searchPrompt }], [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }], 2048); j = extractJSON(t); lastE = null; break; }
+      catch (e) { lastE = e; if (a < 2) await sleep(1200 * (a + 1)); }
+    }
+    if (lastE) throw lastE;
+  } catch (e1) {
+    const t2 = await anthropic([{ role: "user", content: estimatePrompt }], null, 1024);
+    j = extractJSON(t2); estimateOnly = true;
+  }
+  const sugg = round2(Number(j.suggestedPrice) || 0);
+  return { suggestedPrice: sugg, low: round2(Number(j.low) || 0), high: round2(Number(j.high) || 0), sampleSize: j.sampleSize || (j.comps ? j.comps.length : 0), confidence: estimateOnly ? "low" : (j.confidence || "low"), comps: Array.isArray(j.comps) ? j.comps.slice(0, 6) : [], summary: j.summary || "", trend: j.trend || "flat", trendPct: Number(j.trendPct) || 0, trendWindow: j.trendWindow || "", trendNote: j.trendNote || "", recommendation: j.recommendation || "", refImageUrl: j.refImageUrl || "", lastSold: j.lastSold && j.lastSold.price ? { price: round2(Number(j.lastSold.price)), date: j.lastSold.date || "recent", note: j.lastSold.note || "" } : null, query: query, estimateOnly: estimateOnly };
+}
+async function hostImg(dataUrl) {
+  try { const r = await fetch("/.netlify/functions/image-store", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl: dataUrl }) }); const j = await r.json(); return r.ok && j.url ? j.url : null; } catch (e) { return null; }
+}
+function BatchFlow({ onClose, onSaveCard, flash, ebayConnected, aiConnected, onConnectAI }) {
+  const [phase, setPhase] = useState("capture");
+  const [items, setItems] = useState([]);
+  const [prog, setProg] = useState({ done: 0, total: 0, label: "" });
+  const [openId, setOpenId] = useState(null);
+  const [listing, setListing] = useState(false);
+  const [listResult, setListResult] = useState(null);
+  const camRef = useRef(null);
+  const fileRef = useRef(null);
+  async function addFiles(fl) {
+    const files = Array.from(fl || []);
+    for (const file of files) {
+      try {
+        const big = await downscale(file, 1024, 0.85);
+        const small = await downscale(file, 360, 0.7);
+        const enh = await enhanceImage(big);
+        const id = Date.now() + "-" + Math.floor(Math.random() * 99999);
+        setItems(p => p.concat([{ id: id, display: enh, thumb: small, hostData: enh, aiB64: big.split(",")[1], status: "pending", approved: false, note: "" }]));
+      } catch (e) {}
+    }
+  }
+  const removeItem = id => setItems(p => p.filter(i => i.id !== id));
+  async function processAll() {
+    setPhase("processing");
+    const pend = items.filter(i => i.status === "pending");
+    for (let idx = 0; idx < pend.length; idx++) {
+      const it = pend[idx];
+      setProg({ done: idx, total: pend.length, label: "Reading & pricing card " + (idx + 1) + " of " + pend.length + "…" });
+      try {
+        const spec = await aiIdentify(it.aiB64, null);
+        const comp = await aiPrice(spec, "");
+        const url = await hostImg(it.hostData);
+        setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { spec: spec, comp: comp, price: comp.suggestedPrice, imageUrls: url ? [url] : [], status: "done", approved: comp.suggestedPrice > 0 }) : x));
+      } catch (e) {
+        setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { status: "error", err: (e && e.message) || "failed" }) : x));
+      }
+    }
+    setProg({ done: pend.length, total: pend.length, label: "Done" });
+    setPhase("review");
+  }
+  async function recomp(it) {
+    setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { status: "repricing" }) : x));
+    try { const comp = await aiPrice(it.spec, it.note || ""); setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { comp: comp, price: comp.suggestedPrice, status: "done" }) : x)); }
+    catch (e) { setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { status: "done" }) : x)); }
+  }
+  function titleFor(it) { const s = it.spec || {}; return [s.year, s.brand, s.set, s.player, s.variation, s.isRookie ? "RC" : ""].filter(Boolean).join(" ") || "Unknown card"; }
+  async function listApproved() {
+    const approved = items.filter(i => i.status === "done" && i.approved && Number(i.price) > 0);
+    if (!approved.length) return;
+    setListing(true);
+    let ok = 0, fail = 0; const errs = [];
+    for (const it of approved) {
+      const s = it.spec || {};
+      const title = titleFor(it).slice(0, 80);
+      const base = Object.assign({}, s, { thumb: it.thumb }, it.comp || {}, { price: round2(Number(it.price) || 0), title: title, imageUrls: it.imageUrls || [], imageUrl: (it.imageUrls || [])[0] || "", cost: null, acquiredDate: new Date().toISOString(), createdDate: new Date().toISOString(), id: it.id, condition: s.conditionEstimate });
+      if (ebayConnected) {
+        try { const r = await ebayPublish(base); onSaveCard(Object.assign({}, base, { status: "listed", listedDate: new Date().toISOString(), ebayId: r.listingId || "", ebayUrl: r.url || "" })); ok++; }
+        catch (e) { fail++; errs.push(title.slice(0, 40) + ": " + ((e && e.message) || "failed")); onSaveCard(Object.assign({}, base, { status: "draft" })); }
+      } else { onSaveCard(Object.assign({}, base, { status: "draft" })); ok++; }
+    }
+    setListing(false);
+    setListResult({ ok: ok, fail: fail, errs: errs });
+  }
+  const doneItems = items.filter(i => i.status !== "pending");
+  const approvedCount = items.filter(i => i.approved && i.status === "done" && Number(i.price) > 0).length;
+  const header = rce("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } }, rce("p", { className: "eyebrow" }, "Batch — scan a lot"), rce("button", { className: "btn btn-ghost btn-sm", style: { width: "auto" }, onClick: onClose }, rce(X, { size: 16 })));
+  if (phase === "capture") {
+    return rce("div", { className: "section" }, header,
+      rce("div", { className: "dropzone" }, rce("div", { className: "ring" }, rce(Camera, { size: 28 })),
+        rce("div", { className: "display", style: { fontSize: 19, fontWeight: 600 } }, items.length ? (items.length + " card" + (items.length === 1 ? "" : "s") + " queued") : "Add your cards"),
+        rce("p", { style: { color: "var(--muted)", fontSize: 13, marginTop: 6, lineHeight: 1.5 } }, "Snap each card's front. Add as many as you want, then read + price them all at once."),
+        rce("div", { className: "cap-row" }, rce("button", { className: "btn btn-money", onClick: () => camRef.current && camRef.current.click() }, rce(Camera, { size: 17 }), " Take photo"), rce("button", { className: "btn btn-ghost", onClick: () => fileRef.current && fileRef.current.click() }, rce(Upload, { size: 17 }), " Upload"))),
+      rce("input", { ref: camRef, type: "file", accept: "image/*", capture: "environment", hidden: true, onChange: e => { addFiles(e.target.files); e.target.value = ""; } }),
+      rce("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, hidden: true, onChange: e => { addFiles(e.target.files); e.target.value = ""; } }),
+      items.length > 0 && rce("div", { className: "section", style: { display: "flex", flexWrap: "wrap", gap: 8 } }, items.map(it => rce("div", { key: it.id, style: { width: 64 } }, rce("div", { className: "preview-wrap", style: { width: 64 } }, rce("img", { src: it.display, alt: "card", style: { maxHeight: 90 } })), rce("button", { className: "btn btn-ghost btn-sm", style: { width: "100%", padding: "2px", marginTop: 2, color: "var(--danger)" }, onClick: () => removeItem(it.id) }, "Remove")))),
+      !aiConnected && rce("div", { className: "note", style: { marginTop: 12, cursor: "pointer" }, onClick: onConnectAI }, rce(KeyRound, { className: "ic", size: 15, style: { color: "var(--indigo)" } }), rce("span", null, "Connect your Claude key first. ", rce("a", { className: "lnk" }, "Set up →"))),
+      rce("button", { className: "btn btn-money section", disabled: !items.length || !aiConnected, onClick: processAll }, rce(Sparkles, { size: 16 }), " Read & price " + items.length + " card" + (items.length === 1 ? "" : "s")));
+  }
+  if (phase === "processing") {
+    return rce("div", { className: "section" }, header, rce(Spinner, { label: prog.label || "Processing…", sub: "Reading each card and pulling live comps" }), rce("div", { style: { textAlign: "center", color: "var(--muted)", fontSize: 13, marginTop: 8 } }, prog.done + " / " + prog.total + " done"));
+  }
+  if (listResult) {
+    return rce("div", { className: "section" }, header,
+      rce("div", { className: "note", style: { marginTop: 8 } }, rce(Check, { className: "ic", size: 16, style: { color: "var(--money)" } }), rce("span", null, listResult.ok + (ebayConnected ? " listed live" : " saved as drafts") + (listResult.fail ? (", " + listResult.fail + " failed (saved as drafts)") : "") + ".")),
+      listResult.errs && listResult.errs.length ? rce("div", { className: "note warn section" }, rce(AlertTriangle, { className: "ic", size: 15 }), rce("span", null, listResult.errs.slice(0, 6).join(" · "))) : null,
+      rce("button", { className: "btn btn-money section", onClick: onClose }, "Done"));
+  }
+  return rce("div", { className: "section" }, header,
+    rce("p", { style: { color: "var(--muted)", fontSize: 13, marginBottom: 10, lineHeight: 1.5 } }, "Review each card's comps, adjust the price, and check the ones you want. Then list all checked cards at once."),
+    rce("div", null, doneItems.map(it => {
+      const isOpen = openId === it.id; const s = it.spec || {}; const c = it.comp || {};
+      if (it.status === "error") {
+        return rce("div", { key: it.id, className: "card-surface", style: { marginBottom: 10 } }, rce("div", { style: { display: "flex", gap: 10, alignItems: "center" } }, rce("img", { src: it.display, style: { width: 44, height: 62, objectFit: "cover", borderRadius: 6 } }), rce("div", { style: { flex: 1, fontSize: 13, color: "var(--warn)" } }, "Couldn't read this card. " + (it.err || "")), rce("button", { className: "btn btn-ghost btn-sm", style: { width: "auto" }, onClick: () => removeItem(it.id) }, "Remove")));
+      }
+      return rce("div", { key: it.id, className: "card-surface", style: { marginBottom: 10 } },
+        rce("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" } },
+          rce("input", { type: "checkbox", checked: !!it.approved, onChange: e => setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { approved: e.target.checked }) : x)), style: { marginTop: 4, width: 18, height: 18, flexShrink: 0 } }),
+          rce("img", { src: it.display, style: { width: 50, height: 70, objectFit: "cover", borderRadius: 6, flexShrink: 0 } }),
+          rce("div", { style: { flex: 1, minWidth: 0 } },
+            rce("div", { style: { fontWeight: 600, fontSize: 14, lineHeight: 1.2 } }, titleFor(it)),
+            rce("div", { style: { fontSize: 12, color: "var(--muted)", marginTop: 2 } }, (c.estimateOnly ? "estimate" : ((c.confidence || "low") + " confidence")) + (c.sampleSize ? (" · " + c.sampleSize + " comps") : "")),
+            rce("div", { className: "price-edit", style: { marginTop: 6 } }, rce("span", { style: { color: "var(--muted)" } }, "$"), rce("input", { type: "number", value: it.price, onChange: e => setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { price: e.target.value }) : x)) })),
+            rce("button", { className: "btn btn-ghost btn-sm", style: { width: "auto", marginTop: 6 }, onClick: () => setOpenId(isOpen ? null : it.id) }, isOpen ? "Hide comps" : "Review comps"))),
+        isOpen && rce("div", { className: "section" },
+          (c.suggestedPrice > 0 || c.lastSold || c.summary || c.recommendation) && rce(MarketRead, { comp: c, price: it.price, onRefresh: () => recomp(it) }),
+          rce("a", { className: "lnk", href: "https://www.ebay.com/sch/i.html?_nkw=" + encodeURIComponent(c.query || titleFor(it)) + "&LH_Sold=1&LH_Complete=1", target: "_blank", rel: "noreferrer", style: { display: "inline-block", marginTop: 8, fontSize: 12.5 } }, "View sold listings on eBay ↗"),
+          rce("div", { className: "field full", style: { marginTop: 10 } }, rce("label", null, "Add a detail & re-comp"), rce("input", { value: it.note || "", placeholder: "e.g. numbered /25", onChange: e => setItems(p => p.map(x => x.id === it.id ? Object.assign({}, x, { note: e.target.value }) : x)) })),
+          rce("button", { className: "btn btn-ghost", style: { marginTop: 8 }, disabled: it.status === "repricing", onClick: () => recomp(it) }, it.status === "repricing" ? rce(Loader2, { size: 15, className: "spin" }) : rce(RotateCcw, { size: 15 }), " ", it.status === "repricing" ? "Re-comping…" : "Re-comp")));
+    })),
+    rce("div", { className: "note section" }, rce(Sparkles, { className: "ic", size: 15, style: { color: "var(--money)" } }), rce("span", null, ebayConnected ? "Checked cards will list live on eBay." : "eBay not connected — checked cards will save as drafts.")),
+    rce("button", { className: "btn btn-money section", disabled: listing || approvedCount === 0, onClick: listApproved }, listing ? rce(Loader2, { size: 16, className: "spin" }) : rce(Sparkles, { size: 16 }), " ", listing ? "Listing…" : ((ebayConnected ? "List all " : "Save all ") + approvedCount + " checked card" + (approvedCount === 1 ? "" : "s"))));
+}
+
 function App() {
   const [tab, setTab] = useState("scan");
   const [cards, setCards] = useState([]);
@@ -1123,6 +1276,7 @@ function App() {
   const [showConnect, setShowConnect] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [toast, setToast] = useState(null);
   useEffect(() => {
     (async () => {
@@ -1224,18 +1378,26 @@ function App() {
     size: 13
   }), " eBay"))), React.createElement("div", {
     className: "scroll"
-  }, tab === "scan" && React.createElement(ScanFlow, {
+  }, batchOpen && React.createElement(BatchFlow, {
+    onClose: () => setBatchOpen(false),
+    onSaveCard: addCard,
+    flash: flash,
+    ebayConnected: settings.ebayConnected,
+    aiConnected: !!settings.aiKey,
+    onConnectAI: () => setShowSettings(true)
+  }), !batchOpen && tab === "scan" && React.createElement(ScanFlow, {
     ebayConnected: settings.ebayConnected,
     onConnect: () => setShowConnect(true),
     onSample: loadSamples,
     aiConnected: !!settings.aiKey,
     onConnectAI: () => setShowSettings(true),
+    onBatch: () => setBatchOpen(true),
     onSave: c => {
       addCard(c);
       flash(c.status === "listed" ? "Listed + saved to vault" : "Saved to vault");
       setTab("vault");
     }
-  }), tab === "vault" && React.createElement(Vault, {
+  }), !batchOpen && tab === "vault" && React.createElement(Vault, {
     cards: cards,
     ebayConnected: settings.ebayConnected,
     onConnect: () => setShowConnect(true),
@@ -1243,7 +1405,7 @@ function App() {
     updateCard: updateCard,
     deleteCard: deleteCard,
     flash: flash
-  }), tab === "portfolio" && React.createElement(Portfolio, {
+  }), !batchOpen && tab === "portfolio" && React.createElement(Portfolio, {
     cards: cards,
     onScan: () => setTab("scan"),
     onSample: loadSamples
@@ -1308,7 +1470,8 @@ function ScanFlow({
   onConnect,
   onSample,
   aiConnected,
-  onConnectAI
+  onConnectAI,
+  onBatch
 }) {
   const [step, setStep] = useState("idle");
   const [busy, setBusy] = useState(null);
@@ -1743,6 +1906,14 @@ function ScanFlow({
     }), React.createElement("span", null, "Connect your Claude key so scanning and pricing run on your account. ", React.createElement("a", {
       className: "lnk"
     }, "Set up →"))), React.createElement("button", {
+      className: "btn btn-indigo",
+      style: {
+        marginTop: 12
+      },
+      onClick: onBatch
+    }, React.createElement(Package, {
+      size: 16
+    }), " Batch scan a lot"), React.createElement("button", {
       className: "btn btn-ghost",
       style: {
         marginTop: 12
