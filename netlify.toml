@@ -4,3 +4,14 @@
 
 [functions]
   node_bundler = "esbuild"
+
+# Always revalidate the app shell so devices never run a stale cached build.
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, max-age=0, must-revalidate"
