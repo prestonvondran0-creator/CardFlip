@@ -2936,12 +2936,21 @@ function CardSheet({
   const cost = Number(costEdit) || 0;
   const pl = cost > 0 ? round2(netAfterFees(mv) - cost) : null;
   const plPct = cost > 0 ? Math.round(pl / cost * 100) : null;
+  const [costSaved, setCostSaved] = useState(false);
   const saveCost = () => {
     const v = Number(costEdit) > 0 ? round2(Number(costEdit)) : null;
     if (v !== c.cost) updateCard(c.id, {
       cost: v
     });
   };
+  const applyCost = () => {
+    const v = Number(costEdit) > 0 ? round2(Number(costEdit)) : null;
+    updateCard(c.id, { cost: v });
+    setCostSaved(true);
+    if (flash) flash(v != null ? "Cost saved" : "Cost cleared");
+    setTimeout(() => setCostSaved(false), 1500);
+  };
+  const closeSaving = () => { saveCost(); onClose(); };
   const list = async () => {
     setPublishing(true);
     setPubErr("");
@@ -3004,7 +3013,7 @@ function CardSheet({
     }
   }, [c.year, c.brand, c.set].filter(Boolean).join(" "), c.variation ? " · " + c.variation : "")), React.createElement("button", {
     className: "btn btn-ghost btn-sm",
-    onClick: onClose,
+    onClick: closeSaving,
     style: {
       width: "auto"
     }
@@ -3076,7 +3085,11 @@ function CardSheet({
     value: costEdit,
     onChange: e => setCostEdit(e.target.value),
     onBlur: saveCost
-  })), pl !== null && c.status !== "sold" && React.createElement("div", {
+  }), React.createElement("button", {
+    className: "btn btn-money btn-sm",
+    style: { width: "auto", marginLeft: 8, whiteSpace: "nowrap" },
+    onClick: applyCost
+  }, costSaved ? "Saved \u2713" : "Apply")), pl !== null && c.status !== "sold" && React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
