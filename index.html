@@ -672,19 +672,14 @@ const STYLES = `
 
 /* bottom nav — side tabs spread to edges, elevated center scan (CollX/Whatnot pattern) */
 .nav{position:sticky;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;display:flex;align-items:center;
-  justify-content:space-between;background:rgba(14,17,22,.94);backdrop-filter:blur(14px);
-  border-top:1px solid var(--hairline);padding:0 20px calc(12px + env(safe-area-inset-bottom));min-height:88px;}
-.navbtn{flex:1;background:none;border:none;color:var(--faint);padding-top:14px;display:flex;flex-direction:column;
-  align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:600;letter-spacing:.03em;transition:color .15s;}
-.navbtn.on{color:var(--money);}
-.navbtn:active{transform:translateY(1px);}
-.scan-wrap{flex:0 0 auto;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:7px;}
-.scan-btn{width:68px;height:68px;border-radius:22px;display:flex;align-items:center;justify-content:center;margin-top:-30px;
-  background:linear-gradient(135deg,var(--money),#16b97e);color:#06251a;border:4px solid var(--bg);
-  box-shadow:0 12px 28px rgba(55,224,160,.32);transition:transform .15s;}
-.scan-wrap:active .scan-btn{transform:translateY(2px);}
-.scan-label{font-size:12.5px;font-weight:700;letter-spacing:.03em;color:var(--faint);}
-.scan-label.on{color:var(--money);}
+  justify-content:space-around;gap:6px;background:rgba(14,17,22,.94);backdrop-filter:blur(14px);
+  border-top:1px solid var(--hairline);padding:12px 12px calc(12px + env(safe-area-inset-bottom));}
+.tabx{flex:0 1 auto;background:none;border:none;color:var(--faint);cursor:pointer;display:flex;align-items:center;gap:8px;
+  padding:11px 15px;border-radius:18px;font-size:13px;font-weight:600;letter-spacing:.02em;transition:background .18s,color .18s;}
+.tabx .lbl{display:none;white-space:nowrap;}
+.tabx.on{background:var(--money);color:#06251a;}
+.tabx.on .lbl{display:inline;}
+.tabx:active{transform:translateY(1px);}
 
 /* modal */
 .scrim{position:fixed;inset:0;background:rgba(6,8,11,.7);backdrop-filter:blur(3px);z-index:40;display:flex;align-items:flex-end;justify-content:center;}
@@ -1678,29 +1673,7 @@ function App() {
   }), !batchOpen && !lotOpen && tab === "grade" && rce(GradeFlow, {
     aiConnected: !!settings.aiKey,
     onConnectAI: () => setShowSettings(true)
-  })), React.createElement("nav", {
-    className: "nav"
-  }, React.createElement("button", {
-    className: "navbtn" + (tab === "vault" ? " on" : ""),
-    onClick: () => setTab("vault")
-  }, React.createElement(Package, {
-    size: 27
-  }), " ", React.createElement("span", null, "Vault")), React.createElement("button", {
-    className: "scan-wrap",
-    onClick: () => setTab("scan")
-  }, React.createElement("span", {
-    className: "scan-btn"
-  }, React.createElement(ScanLine, {
-    size: 31,
-    strokeWidth: 2.2
-  })), React.createElement("span", {
-    className: "scan-label" + (tab === "scan" ? " on" : "")
-  }, "Scan")), React.createElement("button", {
-    className: "navbtn" + (tab === "portfolio" ? " on" : ""),
-    onClick: () => setTab("portfolio")
-  }, React.createElement(Wallet, {
-    size: 27
-  }), " ", React.createElement("span", null, "Portfolio")), rce("button", { className: "navbtn" + (tab === "grade" ? " on" : ""), onClick: () => setTab("grade") }, rce(ShieldCheck, { size: 25 }), " ", rce("span", null, "Grade")))), showConnect && React.createElement(ConnectSheet, {
+  })), React.createElement("nav", { className: "nav" }, [["vault", "Vault", Package], ["scan", "Scan", ScanLine], ["portfolio", "Portfolio", Wallet], ["grade", "Grade", ShieldCheck]].map(function (t) { return rce("button", { key: t[0], className: "tabx" + (tab === t[0] ? " on" : ""), onClick: () => setTab(t[0]), "aria-label": t[1] }, rce(t[2], { size: 23 }), rce("span", { className: "lbl" }, t[1])); }))), showConnect && React.createElement(ConnectSheet, {
     settings: settings,
     onClose: () => setShowConnect(false)
   }), showSettings && React.createElement(SettingsSheet, {
