@@ -760,6 +760,13 @@ async function saveKey(k, v) {
     await window.storage.set(k, JSON.stringify(v));
   } catch {}
 }
+async function loadVaultServer() {
+  try { const r = await fetch("/.netlify/functions/vault"); if (!r.ok) return null; const j = await r.json(); return Array.isArray(j.cards) ? j.cards : null; } catch (e) { return null; }
+}
+let _vaultSaveTimer = null;
+function saveVaultServer(cards) {
+  try { clearTimeout(_vaultSaveTimer); _vaultSaveTimer = setTimeout(function () { fetch("/.netlify/functions/vault", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cards: cards }) }).catch(function () {}); }, 800); } catch (e) {}
+}
 function loadImage(src) {
   return new Promise((res, rej) => {
     const i = new Image();
@@ -1398,7 +1405,17 @@ function App() {
   const [toast, setToast] = useState(null);
   useEffect(() => {
     (async () => {
-      setCards(await loadKey(VKEY, []));
+      const localCards = await loadKey(VKEY, []);
+      let merged = localCards;
+      const serverCards = await loadVaultServer();
+      if (Array.isArray(serverCards)) {
+        const byId = {};
+        serverCards.forEach(c => { if (c && c.id) byId[c.id] = c; });
+        (localCards || []).forEach(c => { if (c && c.id) byId[c.id] = c; });
+        merged = Object.values(byId).sort((a, b) => new Date(b.createdDate || b.acquiredDate || 0) - new Date(a.createdDate || a.acquiredDate || 0));
+      }
+      setCards(merged);
+      if (merged && merged.length) { saveKey(VKEY, merged); saveVaultServer(merged); }
       const s = await loadKey(SKEY, {
         ebayConnected: false,
         ebayAccount: "",
@@ -1410,7 +1427,7 @@ function App() {
     })();
   }, []);
   useEffect(() => {
-    if (ready) saveKey(VKEY, cards);
+    if (ready) { saveKey(VKEY, cards); saveVaultServer(cards); }
   }, [cards, ready]);
   useEffect(() => {
     if (ready) saveKey(SKEY, settings);
