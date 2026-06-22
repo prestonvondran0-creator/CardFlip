@@ -31,10 +31,8 @@ export default async (req) => {
   const title = (card.title || "Trading card").slice(0, 80);
   const isLot = !!card.isLot;
 
-  // ---- 1. Resolve seller policies (env override, else first available) ----
-  let fulfillmentId = process.env.EBAY_FULFILLMENT_POLICY_ID;
-  let paymentId = process.env.EBAY_PAYMENT_POLICY_ID;
-  let returnId = process.env.EBAY_RETURN_POLICY_ID;
+  // ---- 1. Resolve seller policies (multi-user: always each seller's OWN policies, never a shared env override) ----
+  let fulfillmentId, paymentId, returnId;
   try {
     if (!fulfillmentId) {
       const r = await ebayFetch(`/sell/account/v1/fulfillment_policy?marketplace_id=${MARKETPLACE}`, { token });
@@ -53,8 +51,8 @@ export default async (req) => {
     return fail("Your eBay account needs business policies (payment, shipping, return). Create them in eBay › Account Settings › Business Policies, then try again.");
   }
 
-  // ---- 2. Resolve inventory location (env override, else first available) ----
-  let locationKey = process.env.EBAY_LOCATION_KEY;
+  // ---- 2. Resolve inventory location (multi-user: each seller's own location) ----
+  let locationKey;
   if (!locationKey) {
     try {
       const r = await ebayFetch(`/sell/inventory/v1/location`, { token });
