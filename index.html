@@ -2881,6 +2881,7 @@ function Vault({
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(null);
+  const [sort, setSort] = useState("new");
   if (!ready && (!cards || cards.length === 0)) {
     return rce("div", { className: "section", style: { marginTop: 8 } }, [0, 1, 2, 3, 4].map(i => rce("div", { key: i, className: "vrow", style: { cursor: "default" } }, rce("div", { className: "skel", style: { width: 54, height: 75, flexShrink: 0 } }), rce("div", { style: { flex: 1, paddingTop: 4 } }, rce("div", { className: "skel", style: { height: 11, width: "35%", marginBottom: 9 } }), rce("div", { className: "skel", style: { height: 14, width: "72%", marginBottom: 9 } }), rce("div", { className: "skel", style: { height: 11, width: "28%" } })))));
   }
@@ -2896,6 +2897,10 @@ function Vault({
   if (q.trim()) {
     const t = q.toLowerCase();
     shown = shown.filter(c => (c.title || "").toLowerCase().includes(t) || (c.player || "").toLowerCase().includes(t));
+  }
+  if (sort !== "new") {
+    const pf = c => Number(c.cost) > 0 ? (netAfterFees(Number(c.soldPrice || c.price) || 0) - Number(c.cost)) : -Infinity;
+    shown = shown.slice().sort((a, b) => sort === "value" ? ((Number(b.suggestedPrice || b.price) || 0) - (Number(a.suggestedPrice || a.price) || 0)) : (pf(b) - pf(a)));
   }
   const openCard = open ? cards.find(c => c.id === open) : null;
   return React.createElement("div", {
@@ -2972,7 +2977,7 @@ function Vault({
     style: {
       opacity: .6
     }
-  }, counts[k])))), shown.length === 0 ? React.createElement("div", {
+  }, counts[k])))), rce("div", { className: "filters", style: { marginTop: 8 } }, [["new", "Newest"], ["value", "Value"], ["profit", "Profit"]].map(([k, l]) => rce("button", { key: k, className: "fchip" + (sort === k ? " on" : ""), onClick: () => setSort(k) }, l))), shown.length === 0 ? React.createElement("div", {
     className: "empty"
   }, React.createElement("div", {
     className: "ic"
