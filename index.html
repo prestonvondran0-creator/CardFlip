@@ -735,7 +735,13 @@ a.lnk{color:var(--indigo);text-decoration:none;font-weight:600;}
 .tabx.on{box-shadow:0 7px 20px -7px rgba(55,224,160,.6);}
 .card-surface{transition:border-color .18s,transform .18s;}
 .field input:focus,.field select:focus{box-shadow:0 0 0 3px rgba(123,137,255,.18);}
-.dropzone .ring{box-shadow:0 0 0 7px rgba(55,224,160,.06);}
+.dropzone .ring{box-shadow:0 0 0 7px rgba(55,224,160,.06);animation:ringGlow 2.6s ease-in-out infinite;}
+@keyframes ringGlow{0%,100%{box-shadow:0 0 0 6px rgba(55,224,160,.05),0 0 18px -2px rgba(55,224,160,.25)}50%{box-shadow:0 0 0 11px rgba(55,224,160,.02),0 0 30px 2px rgba(55,224,160,.4)}}
+.celebrate{position:fixed;inset:0;z-index:60;pointer-events:none;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.celebrate-check{width:96px;height:96px;border-radius:50%;background:var(--money);color:#06251a;display:flex;align-items:center;justify-content:center;box-shadow:0 14px 44px -8px rgba(55,224,160,.7);animation:popCheck .55s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes popCheck{0%{transform:scale(0);opacity:0}60%{transform:scale(1.18)}100%{transform:scale(1);opacity:1}}
+.confetti{position:absolute;top:-14px;width:9px;height:15px;border-radius:2px;animation:cfFall 1.5s linear forwards;}
+@keyframes cfFall{0%{top:-14px;opacity:1}100%{top:105%;opacity:.85}}
 
 /* P/L + portfolio */
 .plpill{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;padding:6px 11px;border-radius:999px;font-family:'Oswald';}
@@ -1544,6 +1550,7 @@ function App() {
   const [batchOpen, setBatchOpen] = useState(false);
   const [lotOpen, setLotOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [celebrate, setCelebrate] = useState(false);
   useEffect(() => {
     (async () => {
       const localCards = await loadKey(VKEY, []);
@@ -1702,6 +1709,7 @@ function App() {
     onSave: c => {
       addCard(c);
       flash(c.status === "listed" ? "Listed + saved to vault" : "Saved to vault");
+      if (c.status === "listed") { setCelebrate(true); setTimeout(() => setCelebrate(false), 1600); }
       setTab("vault");
     }
   }), !batchOpen && !lotOpen && tab === "vault" && React.createElement(Vault, {
@@ -1753,7 +1761,26 @@ function App() {
     }
   }), toast && React.createElement("div", {
     className: "toast"
-  }, toast));
+  }, toast), celebrate && React.createElement(Celebrate, null));
+}
+function CountUp({ value }) {
+  const [d, setD] = useState(Number(value) || 0);
+  const fromRef = useRef(Number(value) || 0);
+  useEffect(() => {
+    const start = fromRef.current, target = Number(value) || 0;
+    if (start === target) { setD(target); return; }
+    const t0 = performance.now(), dur = 600; let raf;
+    const tick = t => { const p = Math.min(1, (t - t0) / dur); const e = 1 - Math.pow(1 - p, 3); setD(start + (target - start) * e); if (p < 1) raf = requestAnimationFrame(tick); else { fromRef.current = target; setD(target); } };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return fmt(d);
+}
+function Celebrate() {
+  const colors = ["#37E0A0", "#7B89FF", "#F5B544", "#9B6CFF", "#FF6B6B"];
+  const pieces = [];
+  for (let i = 0; i < 30; i++) pieces.push(React.createElement("span", { key: i, className: "confetti", style: { left: (Math.random() * 100) + "%", background: colors[i % colors.length], animationDelay: (Math.random() * 0.3).toFixed(2) + "s", transform: "rotate(" + Math.floor(Math.random() * 360) + "deg)" } }));
+  return React.createElement("div", { className: "celebrate" }, React.createElement("div", { className: "celebrate-check" }, React.createElement(Check, { size: 46 })), pieces);
 }
 function ScanFlow({
   onSave,
@@ -2477,7 +2504,7 @@ function ScanFlow({
     }
   }, "Your list price"), React.createElement("div", {
     className: "amt"
-  }, fmt(price)), React.createElement(Delta, {
+  }, React.createElement(CountUp, { value: price })), React.createElement(Delta, {
     price: price,
     suggested: comp.suggestedPrice
   }), React.createElement(VsLastSold, {
