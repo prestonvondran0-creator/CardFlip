@@ -720,6 +720,22 @@ a.lnk{color:var(--indigo);text-decoration:none;font-weight:600;}
 .btn:active{transform:scale(.97);}
 .btn:disabled{opacity:.5;}
 .tabx{transition:background .18s,color .18s,transform .1s;}
+/* eye-candy pass */
+.cf-root{background:radial-gradient(135% 90% at 50% -6%, rgba(123,137,255,.07), transparent 55%), var(--bg);}
+@keyframes cfUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes cfPop{0%{opacity:0;transform:scale(.82)}100%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion: no-preference){
+  .section{animation:cfUp .42s cubic-bezier(.22,1,.36,1) both;}
+  .pricechip .amt,.hero-val .big{animation:cfPop .55s cubic-bezier(.34,1.56,.64,1) both;}
+}
+.btn-money{box-shadow:0 10px 26px -10px rgba(55,224,160,.55);}
+.btn-money:active{box-shadow:0 6px 16px -10px rgba(55,224,160,.5);}
+.btn-indigo{box-shadow:0 10px 26px -10px rgba(123,137,255,.5);}
+.brandmark .logo{box-shadow:0 5px 16px -5px rgba(55,224,160,.55);}
+.tabx.on{box-shadow:0 7px 20px -7px rgba(55,224,160,.6);}
+.card-surface{transition:border-color .18s,transform .18s;}
+.field input:focus,.field select:focus{box-shadow:0 0 0 3px rgba(123,137,255,.18);}
+.dropzone .ring{box-shadow:0 0 0 7px rgba(55,224,160,.06);}
 
 /* P/L + portfolio */
 .plpill{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;padding:6px 11px;border-radius:999px;font-family:'Oswald';}
