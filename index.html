@@ -712,6 +712,14 @@ a.lnk{color:var(--indigo);text-decoration:none;font-weight:600;}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--money);display:inline-block;margin-right:6px;}
 @media (prefers-reduced-motion: no-preference){.live-dot{animation:pulse 1.6s ease-in-out infinite;}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.skel{background:var(--raised);border-radius:10px;animation:skelp 1.3s ease-in-out infinite;}
+@keyframes skelp{0%,100%{opacity:.4}50%{opacity:.8}}
+.vrow{transition:border-color .15s,transform .12s;}
+.vrow:active{transform:scale(.995);}
+.btn{transition:transform .1s,background .15s,border-color .15s,opacity .15s;}
+.btn:active{transform:scale(.97);}
+.btn:disabled{opacity:.5;}
+.tabx{transition:background .18s,color .18s,transform .1s;}
 
 /* P/L + portfolio */
 .plpill{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;padding:6px 11px;border-radius:999px;font-family:'Oswald';}
@@ -1698,11 +1706,13 @@ function App() {
     onConnect: () => setShowConnect(true),
     onSample: loadSamples,
     onRecover: recoverFromEbay,
+    ready: ready,
     updateCard: updateCard,
     deleteCard: deleteCard,
     flash: flash
   }), !batchOpen && !lotOpen && tab === "portfolio" && React.createElement(Portfolio, {
     cards: cards,
+    ready: ready,
     onScan: () => setTab("scan"),
     onSample: loadSamples
   }), !batchOpen && !lotOpen && tab === "grade" && rce(GradeFlow, {
@@ -2863,6 +2873,7 @@ function Vault({
   onConnect,
   onSample,
   onRecover,
+  ready,
   updateCard,
   deleteCard,
   flash
@@ -2870,6 +2881,9 @@ function Vault({
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(null);
+  if (!ready && (!cards || cards.length === 0)) {
+    return rce("div", { className: "section", style: { marginTop: 8 } }, [0, 1, 2, 3, 4].map(i => rce("div", { key: i, className: "vrow", style: { cursor: "default" } }, rce("div", { className: "skel", style: { width: 54, height: 75, flexShrink: 0 } }), rce("div", { style: { flex: 1, paddingTop: 4 } }, rce("div", { className: "skel", style: { height: 11, width: "35%", marginBottom: 9 } }), rce("div", { className: "skel", style: { height: 14, width: "72%", marginBottom: 9 } }), rce("div", { className: "skel", style: { height: 11, width: "28%" } })))));
+  }
   const counts = {
     all: cards.length,
     draft: cards.filter(c => c.status === "draft").length,
@@ -3335,9 +3349,13 @@ function CardSheet({
 }
 function Portfolio({
   cards,
+  ready,
   onScan,
   onSample
 }) {
+  if (!ready && (!cards || cards.length === 0)) {
+    return rce("div", { className: "section", style: { marginTop: 8 } }, rce("div", { className: "skel", style: { height: 132, marginBottom: 14 } }), rce("div", { style: { display: "flex", gap: 12, marginBottom: 18 } }, rce("div", { className: "skel", style: { height: 60, flex: 1 } }), rce("div", { className: "skel", style: { height: 60, flex: 1 } })), [0, 1, 2].map(i => rce("div", { key: i, className: "skel", style: { height: 46, marginBottom: 10 } })));
+  }
   const mv = c => Number(c.suggestedPrice || c.price || 0);
   const holdings = cards.filter(c => c.status !== "sold");
   const sold = cards.filter(c => c.status === "sold");
