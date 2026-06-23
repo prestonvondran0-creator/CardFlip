@@ -1,7 +1,7 @@
 // /.netlify/functions/ebay-publish  (POST)
 // Body: { sku, title, price, description, player, year, brand, set, cardNumber, variation, sport, team, isRookie, condition, imageUrl }
 // Runs eBay's real 3-step Sell/Inventory flow: create inventory item -> create offer -> publish offer.
-import { getAccessToken, ebayFetch, MARKETPLACE, uidFrom } from "../../ebay-lib.mjs";
+import { getAccessToken, ebayFetch, MARKETPLACE, uidFrom, store } from "../../ebay-lib.mjs";
 
 const CURRENCY = process.env.EBAY_CURRENCY || "USD";
 
@@ -21,9 +21,11 @@ export default async (req) => {
   let card;
   try { card = await req.json(); } catch { return fail("Bad JSON body"); }
 
+  const uid = card.uid || uidFrom(req);
   let token;
-  try { token = await getAccessToken(card.uid || uidFrom(req)); }
+  try { token = await getAccessToken(uid); }
   catch (e) { return fail("eBay not connected — connect your account first.", e.message); }
+  const cfgKey = "ebay_cfg:" + (uid || "");
 
   const sku = (card.sku || "CF-" + Date.now()).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 50);
   const price = Number(card.price);
@@ -31,47 +33,38 @@ export default async (req) => {
   const title = (card.title || "Trading card").slice(0, 80);
   const isLot = !!card.isLot;
 
-  // ---- 1. Resolve seller policies (multi-user: always each seller's OWN policies, never a shared env override) ----
-  let fulfillmentId, paymentId, returnId;
-  try {
-    if (!fulfillmentId) {
-      const r = await ebayFetch(`/sell/account/v1/fulfillment_policy?marketplace_id=${MARKETPLACE}`, { token });
-      fulfillmentId = r.json.fulfillmentPolicies?.[0]?.fulfillmentPolicyId;
+  // ---- 1+2. Seller policies + location (cached per user; resolved in parallel on first listing) ----
+  let fulfillmentId, paymentId, returnId, locationKey;
+  let cfg = null;
+  try { cfg = await store().get(cfgKey, { type: "json" }); } catch {}
+  if (cfg && cfg.fulfillmentId && cfg.paymentId && cfg.returnId && cfg.locationKey) {
+    ({ fulfillmentId, paymentId, returnId, locationKey } = cfg);
+  } else {
+    try {
+      const [fp, pp, rp, loc] = await Promise.all([
+        ebayFetch(`/sell/account/v1/fulfillment_policy?marketplace_id=${MARKETPLACE}`, { token }),
+        ebayFetch(`/sell/account/v1/payment_policy?marketplace_id=${MARKETPLACE}`, { token }),
+        ebayFetch(`/sell/account/v1/return_policy?marketplace_id=${MARKETPLACE}`, { token }),
+        ebayFetch(`/sell/inventory/v1/location`, { token }),
+      ]);
+      fulfillmentId = fp.json.fulfillmentPolicies?.[0]?.fulfillmentPolicyId;
+      paymentId = pp.json.paymentPolicies?.[0]?.paymentPolicyId;
+      returnId = rp.json.returnPolicies?.[0]?.returnPolicyId;
+      locationKey = loc.json.locations?.[0]?.merchantLocationKey;
+    } catch (e) { return fail("Couldn't read your eBay business policies or location.", e.message); }
+    if (fulfillmentId && paymentId && returnId && locationKey) {
+      try { await store().setJSON(cfgKey, { fulfillmentId, paymentId, returnId, locationKey }); } catch {}
     }
-    if (!paymentId) {
-      const r = await ebayFetch(`/sell/account/v1/payment_policy?marketplace_id=${MARKETPLACE}`, { token });
-      paymentId = r.json.paymentPolicies?.[0]?.paymentPolicyId;
-    }
-    if (!returnId) {
-      const r = await ebayFetch(`/sell/account/v1/return_policy?marketplace_id=${MARKETPLACE}`, { token });
-      returnId = r.json.returnPolicies?.[0]?.returnPolicyId;
-    }
-  } catch (e) { return fail("Couldn't read your eBay business policies.", e.message); }
+  }
   if (!fulfillmentId || !paymentId || !returnId) {
     return fail("Your eBay account needs business policies (payment, shipping, return). Create them in eBay › Account Settings › Business Policies, then try again.");
   }
-
-  // ---- 2. Resolve inventory location (multi-user: each seller's own location) ----
-  let locationKey;
   if (!locationKey) {
-    try {
-      const r = await ebayFetch(`/sell/inventory/v1/location`, { token });
-      locationKey = r.json.locations?.[0]?.merchantLocationKey;
-    } catch (e) { return fail("Couldn't read your eBay inventory locations.", e.message); }
-  }
-  if (!locationKey) {
-    return fail("Your eBay account needs an inventory location. Add one in eBay Seller Hub, or set EBAY_LOCATION_KEY.");
+    return fail("Your eBay account needs an inventory location. Add one in eBay Seller Hub.");
   }
 
-  // ---- 3. Category (env override, else Taxonomy suggestion from the title) ----
-  let categoryId = process.env.EBAY_CATEGORY_ID;
-  if (!categoryId) {
-    try {
-      const r = await ebayFetch(`/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q=${encodeURIComponent(title)}`, { token });
-      categoryId = r.json.categorySuggestions?.[0]?.category?.categoryId;
-    } catch { /* fall through to default */ }
-  }
-  if (!categoryId) categoryId = isLot ? "261329" : "261328"; // Sports Trading Card Singles (US) — override with EBAY_CATEGORY_ID
+  // ---- 3. Category (defaults are correct for sports cards; skip taxonomy round-trip for speed) ----
+  const categoryId = process.env.EBAY_CATEGORY_ID || (isLot ? "261329" : "261328"); // Singles 261328 / Lots 261329
 
   // ---- 4. Build + create the inventory item ----
   const aspects = {};
@@ -131,12 +124,12 @@ export default async (req) => {
   if (!offer.ok) {
     // If an offer already exists for this SKU, eBay returns it in the error details.
     offerId = offer.json.errors?.[0]?.parameters?.find((p) => p.name === "offerId")?.value;
-    if (!offerId) return fail("eBay rejected the offer: " + errText(offer.json), offer.json);
+    if (!offerId) { try { await store().delete(cfgKey); } catch {} return fail("eBay rejected the offer: " + errText(offer.json), offer.json); }
   }
 
   // ---- 6. Publish ----
   const pub = await ebayFetch(`/sell/inventory/v1/offer/${offerId}/publish`, { method: "POST", token });
-  if (!pub.ok) return fail("eBay couldn't publish the listing: " + errText(pub.json), pub.json);
+  if (!pub.ok) { try { await store().delete(cfgKey); } catch {} return fail("eBay couldn't publish the listing: " + errText(pub.json), pub.json); }
 
   const listingId = pub.json.listingId;
   return new Response(JSON.stringify({

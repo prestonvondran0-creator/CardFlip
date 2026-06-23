@@ -830,18 +830,6 @@ async function enhanceImage(dataUrl) {
       r = gray + (r - gray) * sat; g = gray + (g - gray) * sat; b = gray + (b - gray) * sat;
       d[i] = _clamp8(r); d[i + 1] = _clamp8(g); d[i + 2] = _clamp8(b);
     }
-    const src = Uint8ClampedArray.from(d);
-    const a = 0.45;
-    for (let y = 1; y < h - 1; y++) {
-      for (let x = 1; x < w - 1; x++) {
-        const o = (y * w + x) * 4;
-        for (let ch = 0; ch < 3; ch++) {
-          const k = o + ch;
-          const v = (1 + 4 * a) * src[k] - a * (src[k - 4] + src[k + 4] + src[k - w * 4] + src[k + w * 4]);
-          d[k] = _clamp8(v);
-        }
-      }
-    }
     ctx.putImageData(id, 0, 0);
     return c.toDataURL("image/jpeg", 0.9);
   } catch {
@@ -1784,6 +1772,15 @@ function ScanFlow({
   const camRef = useRef(null);
   const backFileRef = useRef(null);
   const backCamRef = useRef(null);
+  const hostCacheRef = useRef(new Map());
+  const compsPrefetch = useRef(null);
+  function compKey(sp, note) { return ((sp.compQuery || [sp.year, sp.brand, sp.set, sp.player, sp.cardNumber, sp.variation].filter(Boolean).join(" ")) + "|" + (note || "")).trim().toLowerCase(); }
+  useEffect(() => {
+    if (step !== "priced") return;
+    const f = frontChoice === "nobg" ? bgRemoved : frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig);
+    if (f) hostImage(f);
+    if (backB64) hostImage("data:image/jpeg;base64," + backB64);
+  }, [step, frontChoice, frontEnhanced, bgRemoved]);
   const reset = () => {
     setStep("idle");
     setBusy(null);
@@ -1900,7 +1897,7 @@ function ScanFlow({
         content
       }]);
       const j = extractJSON(text);
-      setSpec({
+      const sp = {
         sport: j.sport || "",
         player: j.player || "",
         year: j.year || "",
@@ -1914,7 +1911,9 @@ function ScanFlow({
         conditionNotes: j.conditionNotes || "",
         compQuery: j.compQuery || "",
         confidence: j.confidence || "medium"
-      });
+      };
+      setSpec(sp);
+      try { const _k = compKey(sp, ""); const _pr = aiPrice(sp, ""); _pr.catch(function () {}); compsPrefetch.current = { key: _k, promise: _pr }; } catch (e) {}
       setStep("identified");
     } catch (e) {
       setErr("Couldn't auto-read this card (" + e.message + "). Type the details in below — everything else works the same.");
@@ -1925,93 +1924,29 @@ function ScanFlow({
     }
   }
   async function findComps() {
-    setBusy("comps");
-    setErr("");
+    setBusy("comps"); setErr("");
     const noteStr = (compNote || "").trim();
-    const noteClause = noteStr ? " IMPORTANT detail from the seller that the comps MUST match: \"" + noteStr + "\". If this indicates a serial print run (e.g. /25), only use sold listings of that exact print run - do not substitute other numbered parallels (e.g. /499) or the base card. " : "";
-    const query = (spec.compQuery || [spec.year, spec.brand, spec.set, spec.player, spec.cardNumber, spec.variation].filter(Boolean).join(" ")) + (noteStr ? " " + noteStr : "");
-    const searchPrompt = "You are a sports-card market analyst. Search the web for recent eBay SOLD / completed listings AND the price trend for this card: \"" + query + "\". " + noteClause + "Consider how the market for this player/set/year has moved recently. Then respond with ONLY a JSON object (no markdown) with keys: " + "suggestedPrice (number USD, fair list price), low (number), high (number), sampleSize (integer), " + "confidence ('low'|'medium'|'high'), comps (array of up to 6 {title, price (number), note}), summary (one sentence), " + "trend ('up'|'down'|'flat'), trendPct (number), trendWindow (string e.g. '90 days'), trendNote (one short sentence), " + "lastSold ({price (number), date (string), note (string)}), recommendation (one short, actionable sentence), refImageUrl (a direct public https URL to a clear image of THIS exact card from a sold listing or card catalog; empty string if unsure). " + "If solid data isn't found, estimate conservatively, set confidence='low' and trend='flat'.";
-    const estimatePrompt = "You cannot browse the web. From your own knowledge of the sports-card market, estimate the current resale value for this card: \"" + query + "\". " + noteClause + "Be conservative. Respond with ONLY a JSON object (no markdown) with keys: suggestedPrice (number USD), low (number), high (number), " + "sampleSize (0), confidence ('low'), comps ([]), summary (one sentence), trend ('up'|'down'|'flat'), trendPct (number), trendWindow (string), " + "trendNote (one short sentence), lastSold (null), recommendation (one short sentence), refImageUrl ('').";
-    let j = null,
-      estimateOnly = false,
-      firstErr = "";
-    const _sleep = ms => new Promise(r => setTimeout(r, ms));
+    const key = compKey(spec, noteStr);
+    let result;
     try {
-      let _lastE = null;
-      for (let _a = 0; _a < 3; _a++) {
-        try {
-          const text = await anthropic([{
-            role: "user",
-            content: searchPrompt
-          }], [{
-            type: "web_search_20250305",
-            name: "web_search",
-            max_uses: 5
-          }], 2048);
-          j = extractJSON(text);
-          _lastE = null;
-          break;
-        } catch (_eA) {
-          _lastE = _eA;
-          if (_a < 2) await _sleep(1200 * (_a + 1));
-        }
+      if (compsPrefetch.current && compsPrefetch.current.key === key) {
+        result = await compsPrefetch.current.promise;
+        compsPrefetch.current = null;
+      } else {
+        compsPrefetch.current = null;
+        result = await aiPrice(spec, noteStr);
       }
-      if (_lastE) throw _lastE;
-    } catch (e1) {
-      firstErr = e1.message;
-      try {
-        const text2 = await anthropic([{
-          role: "user",
-          content: estimatePrompt
-        }], null, 1024);
-        j = extractJSON(text2);
-        estimateOnly = true;
-      } catch (e2) {
-        setErr("Couldn't price this card (" + firstErr + "). Set your price manually below.");
-        setComp({
-          suggestedPrice: 0,
-          low: 0,
-          high: 0,
-          sampleSize: 0,
-          confidence: "low",
-          comps: [],
-          summary: "",
-          query
-        });
-        setPrice(0);
-        setStep("priced");
-        setBusy(null);
-        return;
-      }
+    } catch (e) {
+      setErr("Couldn't price this card (" + (e && e.message || "") + "). Set your price manually below.");
+      setComp({ suggestedPrice: 0, low: 0, high: 0, sampleSize: 0, confidence: "low", comps: [], summary: "", query: spec.compQuery || "" });
+      setPrice(0); setStep("priced"); setBusy(null); return;
     }
-    const sugg = round2(Number(j.suggestedPrice) || 0);
-    setComp({
-      suggestedPrice: sugg,
-      low: round2(Number(j.low) || 0),
-      high: round2(Number(j.high) || 0),
-      sampleSize: j.sampleSize || (j.comps ? j.comps.length : 0),
-      confidence: estimateOnly ? "low" : j.confidence || "low",
-      comps: Array.isArray(j.comps) ? j.comps.slice(0, 6) : [],
-      summary: j.summary || "",
-      trend: j.trend || "flat",
-      trendPct: Number(j.trendPct) || 0,
-      trendWindow: j.trendWindow || "",
-      trendNote: j.trendNote || "",
-      recommendation: j.recommendation || "",
-      refImageUrl: j.refImageUrl || "",
-      lastSold: j.lastSold && j.lastSold.price ? {
-        price: round2(Number(j.lastSold.price)),
-        date: j.lastSold.date || "recent",
-        note: j.lastSold.note || ""
-      } : null,
-      query,
-      estimateOnly
-    });
-    if (estimateOnly) setErr("Couldn't pull live comps this time, so this is Claude's estimate — double-check before listing. Tap \"Re-comp\" to try again.");
-    setPrice(sugg);
-    setStep("priced");
-    setBusy(null);
+    setComp(result);
+    if (result.estimateOnly) setErr("Couldn't pull live comps this time, so this is Claude's estimate — double-check before listing. Tap \"Re-comp\" to try again.");
+    setPrice(round2(Number(result.suggestedPrice) || 0));
+    setStep("priced"); setBusy(null);
   }
+
   async function save(asListed) {
     setBusy(asListed ? "publishing" : "saving");
     setErr("");
@@ -2065,12 +2000,18 @@ function ScanFlow({
   const applyMk = pct => setPrice(p => round2((Number(p) || 0) * (1 + pct / 100)));
   const to99 = () => setPrice(p => Math.max(0, Math.floor(Number(p) || 0) + 0.99));
   const chosenFrontUrl = frontChoice === "nobg" ? bgRemoved : frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig || previewUrl);
-  async function hostImage(dataUrl) {
-    try {
-      const r = await fetch("/.netlify/functions/image-store", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }) });
-      const j = await r.json();
-      return r.ok && j.url ? j.url : null;
-    } catch { return null; }
+  function hostImage(dataUrl) {
+    if (!dataUrl) return Promise.resolve(null);
+    if (hostCacheRef.current.has(dataUrl)) return hostCacheRef.current.get(dataUrl);
+    const pr = (async () => {
+      try {
+        const r = await fetch("/.netlify/functions/image-store", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }) });
+        const j = await r.json();
+        return r.ok && j.url ? j.url : null;
+      } catch { return null; }
+    })();
+    hostCacheRef.current.set(dataUrl, pr);
+    return pr;
   }
   async function doRemoveBg() {
     const baseImg = frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig);
