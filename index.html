@@ -1211,13 +1211,13 @@ async function measureCentering(dataUrl) {
     const tb = okY ? [Math.round(top / (top + bottom) * 100), Math.round(bottom / (top + bottom) * 100)] : null;
     const worst = Math.max(lr ? Math.abs(lr[0] - 50) : 0, tb ? Math.abs(tb[0] - 50) : 0);
     const cgrade = worst <= 5 ? 10 : worst <= 8 ? 9 : worst <= 12 ? 8 : worst <= 17 ? 7 : worst <= 22 ? 6 : worst <= 30 ? 5 : 4;
-    return { ok: true, lr: lr, tb: tb, worst: worst, cgrade: cgrade };
+    return { ok: true, lr: lr, tb: tb, worst: worst, cgrade: cgrade, rect: { l: cx.a / w, t: cy.a / h, r: cx.b / w, b: cy.b / h } };
   } catch (e) { return { ok: false }; }
 }
 async function aiGrade(frontB64, backB64, centering, spec) {
   const id = spec ? ("The card has been confirmed as: " + ([spec.year, spec.brand, spec.set, spec.player, spec.variation].filter(Boolean).join(" ") + (spec.cardNumber ? (" #" + spec.cardNumber) : "")) + ". Base the raw/PSA9/PSA10 value estimates on THIS exact card. ") : "";
   const cen = centering && centering.ok ? ("A pixel measurement of the front centering was taken: " + (centering.lr ? ("left/right about " + centering.lr[0] + "/" + centering.lr[1]) : "") + (centering.tb ? (", top/bottom about " + centering.tb[0] + "/" + centering.tb[1]) : "") + ". Weight this in the centering assessment. ") : "";
-  const prompt = "You are a professional trading-card grader estimating a PSA-style 1-10 grade from photos. " + id + "The first image is the FRONT" + (backB64 ? ", the second is the BACK" : "") + ". " + cen + "Inspect the CORNERS (sharp vs soft or frayed), EDGES (chipping or whitening), SURFACE (scratches, print lines, dimples, gloss, stains) and CENTERING. Be realistic and slightly conservative since photos hide flaws. Respond with ONLY a JSON object (no markdown) with keys: centering:{grade:number,note:string}, corners:{grade:number,note:string}, edges:{grade:number,note:string}, surface:{grade:number,note:string}, overallGrade:number, gradeLabel:string, gemOdds:string('low'|'medium'|'high'), flags:[string], rawValueEst:number, psa9Value:number, psa10Value:number, gradedValueEst:number, confidence:string('low'|'medium'|'high'), summary:string. All grades are 1-10. rawValueEst is the ungraded USD value, psa9Value is the USD value if it graded PSA 9, psa10Value is the USD value if it graded PSA 10, gradedValueEst is the USD value at the estimated overall grade. If image quality is poor or a side is missing, lower confidence and note it in summary.";
+  const prompt = "You are a professional trading-card grader estimating a PSA-style 1-10 grade from photos. " + id + "The first image is the FRONT" + (backB64 ? ", the second is the BACK" : "") + ". " + cen + "Inspect the CORNERS (sharp vs soft or frayed), EDGES (chipping or whitening), SURFACE (scratches, print lines, dimples, gloss, stains) and CENTERING. Be realistic and slightly conservative since photos hide flaws. Respond with ONLY a JSON object (no markdown) with keys: centering:{grade:number,note:string}, corners:{grade:number,note:string}, edges:{grade:number,note:string}, surface:{grade:number,note:string}, overallGrade:number, gradeLabel:string, gemOdds:string('low'|'medium'|'high'), flags:[string], defects:[{label:string, x:number, y:number, w:number, h:number}], rawValueEst:number, psa9Value:number, psa10Value:number, gradedValueEst:number, confidence:string('low'|'medium'|'high'), summary:string. All grades are 1-10. rawValueEst is the ungraded USD value, psa9Value is the USD value if it graded PSA 9, psa10Value is the USD value if it graded PSA 10, gradedValueEst is the USD value at the estimated overall grade. For defects, return up to 6 of the most visible problem spots on the FRONT image, each with a short label (examples: soft corner, edge whitening, surface scratch, print line) plus x, y, w, h as fractions between 0 and 1 of the image width and height that bound the spot (x,y is its top-left). Only include spots actually visible in the photo; use an empty array if the card looks clean. If image quality is poor or a side is missing, lower confidence and note it in summary.";
   const content = [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frontB64 } }];
   if (backB64) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: backB64 } });
   content.push({ type: "text", text: prompt });
@@ -1226,7 +1226,34 @@ async function aiGrade(frontB64, backB64, centering, spec) {
   const num = (x, dft) => { const n = Number(x); return isFinite(n) ? n : dft; };
   const cl = v => Math.max(1, Math.min(10, v));
   const sub = o => ({ grade: cl(num(o && o.grade, 5)), note: (o && o.note) || "" });
-  return { centering: sub(j.centering), corners: sub(j.corners), edges: sub(j.edges), surface: sub(j.surface), overallGrade: cl(num(j.overallGrade, 5)), gradeLabel: j.gradeLabel || "", gemOdds: j.gemOdds || "low", flags: Array.isArray(j.flags) ? j.flags.slice(0, 8) : [], rawValueEst: round2(num(j.rawValueEst, 0)), psa9Value: round2(num(j.psa9Value, 0)), psa10Value: round2(num(j.psa10Value, 0)), gradedValueEst: round2(num(j.gradedValueEst, 0)), confidence: j.confidence || "low", summary: j.summary || "" };
+  return { centering: sub(j.centering), corners: sub(j.corners), edges: sub(j.edges), surface: sub(j.surface), overallGrade: cl(num(j.overallGrade, 5)), gradeLabel: j.gradeLabel || "", gemOdds: j.gemOdds || "low", flags: Array.isArray(j.flags) ? j.flags.slice(0, 8) : [], defects: Array.isArray(j.defects) ? j.defects.filter(d => d && isFinite(Number(d.x)) && isFinite(Number(d.y))).slice(0, 6) : [], rawValueEst: round2(num(j.rawValueEst, 0)), psa9Value: round2(num(j.psa9Value, 0)), psa10Value: round2(num(j.psa10Value, 0)), gradedValueEst: round2(num(j.gradedValueEst, 0)), confidence: j.confidence || "low", summary: j.summary || "" };
+}
+async function annotateCard(dataUrl, centering, defects) {
+  try {
+    const img = await loadImage(dataUrl);
+    const maxW = 900, scale = Math.min(1, maxW / img.width);
+    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0, w, h);
+    const fpx = Math.max(12, Math.round(w * 0.030));
+    ctx.lineWidth = Math.max(2, Math.round(w * 0.005));
+    ctx.font = "600 " + fpx + "px Inter, system-ui, sans-serif"; ctx.textBaseline = "top";
+    const chip = (txt, x, y, bg, fg) => { const pad = 5, tw = ctx.measureText(txt).width; x = Math.min(Math.max(2, x), w - tw - pad * 2 - 2); y = Math.max(2, y); ctx.fillStyle = bg; ctx.fillRect(x, y, tw + pad * 2, fpx + pad * 2); ctx.fillStyle = fg; ctx.fillText(txt, x + pad, y + pad); };
+    if (centering && centering.ok && centering.rect) {
+      const R = centering.rect, il = R.l * w, ir = R.r * w, it = R.t * h, ib = R.b * h;
+      ctx.strokeStyle = "rgba(123,137,255,.95)"; ctx.setLineDash([]); ctx.strokeRect(1.5, 1.5, w - 3, h - 3);
+      ctx.strokeStyle = "#37E0A0"; ctx.setLineDash([9, 7]); ctx.strokeRect(il, it, ir - il, ib - it); ctx.setLineDash([]);
+      if (centering.lr) chip("L/R  " + centering.lr[0] + " / " + centering.lr[1], 6, Math.round(h / 2 - fpx), "rgba(55,224,160,.92)", "#06251a");
+      if (centering.tb) chip("T/B  " + centering.tb[0] + " / " + centering.tb[1], Math.round(w / 2 - 40), 6, "rgba(55,224,160,.92)", "#06251a");
+    }
+    (defects || []).forEach(d => {
+      const x = Math.max(0, Math.min(1, Number(d.x) || 0)) * w, y = Math.max(0, Math.min(1, Number(d.y) || 0)) * h;
+      const dw = Math.max(0.02, Math.min(1, Number(d.w) || 0.08)) * w, dh = Math.max(0.02, Math.min(1, Number(d.h) || 0.08)) * h;
+      ctx.strokeStyle = "#FF6B6B"; ctx.beginPath(); ctx.ellipse(x + dw / 2, y + dh / 2, dw / 2 + 5, dh / 2 + 5, 0, 0, Math.PI * 2); ctx.stroke();
+      if (d.label) chip(String(d.label), x, y - fpx - 12, "rgba(255,107,107,.95)", "#3a0606");
+    });
+    return c.toDataURL("image/jpeg", 0.85);
+  } catch (e) { return null; }
 }
 function GradeFlow({ aiConnected, onConnectAI }) {
   const [front, setFront] = useState(null);
@@ -1235,6 +1262,7 @@ function GradeFlow({ aiConnected, onConnectAI }) {
   const [spec, setSpec] = useState(null);
   const [res, setRes] = useState(null);
   const [cen, setCen] = useState(null);
+  const [anno, setAnno] = useState(null);
   const [err, setErr] = useState("");
   const fCam = useRef(null), fUp = useRef(null), bCam = useRef(null), bUp = useRef(null);
   const GRADE_COST = 19;
@@ -1256,10 +1284,12 @@ function GradeFlow({ aiConnected, onConnectAI }) {
     try {
       const g = await aiGrade(front.aiB64, back && back.aiB64, centering, spec);
       if (centering && centering.ok && centering.cgrade) g.centering = { grade: centering.cgrade, note: g.centering.note || "measured from border widths" };
+      let annoUrl = null; try { annoUrl = await annotateCard(front.display, centering, g.defects); } catch (e) {}
+      setAnno(annoUrl);
       setRes(g); setPhase("result");
     } catch (e) { setErr((e && e.message) || "couldn't analyze the card"); setPhase("confirm"); }
   }
-  function reset() { setFront(null); setBack(null); setSpec(null); setRes(null); setCen(null); setErr(""); setPhase("capture"); }
+  function reset() { setFront(null); setBack(null); setSpec(null); setRes(null); setCen(null); setAnno(null); setErr(""); setPhase("capture"); }
   const cardName = s => ([s && s.year, s && s.brand, s && s.set, s && s.player, s && s.variation].filter(Boolean).join(" ") + (s && s.cardNumber ? (" #" + s.cardNumber) : "")) || "Unidentified card";
   const slot = (label, ph, which) => rce("div", { className: "card-surface", style: { marginTop: 10 } }, rce("div", { style: { display: "flex", gap: 12, alignItems: "center" } }, ph ? rce("img", { src: ph.display, alt: label, style: { width: 54, height: 75, objectFit: "cover", borderRadius: 6 } }) : rce("div", { style: { width: 54, height: 75, borderRadius: 6, background: "rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "center" } }, rce(Camera, { size: 20, color: "var(--faint)" })), rce("div", { style: { flex: 1, minWidth: 0 } }, rce("div", { style: { fontWeight: 600, fontSize: 13 } }, label), rce("div", { style: { display: "flex", gap: 8, marginTop: 6 } }, rce("button", { className: "btn btn-ghost btn-sm", style: { width: "auto" }, onClick: () => { const rf = which === "front" ? fCam : bCam; rf.current && rf.current.click(); } }, rce(Camera, { size: 14 }), " Photo"), rce("button", { className: "btn btn-ghost btn-sm", style: { width: "auto" }, onClick: () => { const rf = which === "front" ? fUp : bUp; rf.current && rf.current.click(); } }, rce(Upload, { size: 14 }), " Upload")))));
   const bar = (label, val, note) => rce("div", { style: { marginBottom: 11 } }, rce("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 } }, rce("span", null, label), rce("span", { style: { color: val >= 9 ? "var(--money)" : val >= 7 ? "var(--indigo)" : "var(--warn)" } }, String(val))), rce("div", { style: { height: 7, borderRadius: 6, background: "rgba(255,255,255,.08)", marginTop: 4, overflow: "hidden" } }, rce("div", { style: { height: "100%", width: (val * 10) + "%", background: val >= 9 ? "var(--money)" : val >= 7 ? "var(--indigo)" : "var(--warn)" } })), note ? rce("div", { style: { fontSize: 11.5, color: "var(--muted)", marginTop: 3, lineHeight: 1.4 } }, note) : null);
@@ -1285,6 +1315,7 @@ function GradeFlow({ aiConnected, onConnectAI }) {
       rce("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 8, lineHeight: 1.3 } }, cardName(spec)),
       rce("div", { className: "hero-val", style: { textAlign: "center" } }, rce("div", { className: "big", style: { color: gc } }, "PSA " + r.overallGrade), r.gradeLabel ? rce("div", { style: { fontWeight: 600, marginTop: 2 } }, r.gradeLabel) : null, rce("div", { style: { fontSize: 12, color: "var(--muted)", marginTop: 6 } }, (r.confidence || "low") + " confidence · gem-10 odds: " + (r.gemOdds || "low")), r.summary ? rce("div", { style: { fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 } }, r.summary) : null),
       cen && cen.ok ? rce("div", { className: "note", style: { marginTop: 12 } }, rce(ShieldCheck, { className: "ic", size: 15, style: { color: "var(--indigo)" } }), rce("span", null, "Measured centering — " + (cen.lr ? ("L/R " + cen.lr[0] + "/" + cen.lr[1]) : "") + (cen.tb ? ("   T/B " + cen.tb[0] + "/" + cen.tb[1]) : ""))) : null,
+      anno ? rce("div", { style: { marginTop: 12 } }, rce("img", { src: anno, alt: "marked-up card", loading: "lazy", decoding: "async", style: { width: "100%", borderRadius: 12, border: "1px solid var(--hairline)", display: "block" } }), rce("p", { style: { fontSize: 11, color: "var(--faint)", marginTop: 6, textAlign: "center" } }, "Green = centering box · red = flagged spots")) : null,
       rce("div", { className: "section" }, bar("Centering", r.centering.grade, r.centering.note), bar("Corners", r.corners.grade, r.corners.note), bar("Edges", r.edges.grade, r.edges.note), bar("Surface", r.surface.grade, r.surface.note)),
       r.flags && r.flags.length ? rce("div", { className: "note warn", style: { marginTop: 6 } }, rce(AlertTriangle, { className: "ic", size: 15 }), rce("span", null, "Spotted: " + r.flags.join(", "))) : null,
       rce("div", { className: "card-surface", style: { marginTop: 12 } }, rce("div", { className: "eyebrow", style: { marginBottom: 8 } }, "Estimated values"), rce("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 } }, rce("span", { style: { color: "var(--muted)" } }, "Raw / ungraded"), rce("span", { style: { fontWeight: 600 } }, fmt(r.rawValueEst))), rce("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 } }, rce("span", { style: { color: "var(--muted)" } }, "PSA 9"), rce("span", { style: { fontWeight: 600, color: "var(--indigo)" } }, fmt(r.psa9Value))), rce("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 13 } }, rce("span", { style: { color: "var(--muted)" } }, "PSA 10"), rce("span", { style: { fontWeight: 700, color: "var(--money)" } }, fmt(r.psa10Value)))),
