@@ -774,6 +774,9 @@ let _vaultSaveTimer = null;
 function saveVaultServer(cards) {
   try { clearTimeout(_vaultSaveTimer); _vaultSaveTimer = setTimeout(function () { fetch("/.netlify/functions/vault", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: cfuid(), cards: cards }) }).catch(function () {}); }, 800); } catch (e) {}
 }
+async function ebayRecover() {
+  try { const r = await fetch("/.netlify/functions/vault-recover?uid=" + encodeURIComponent(cfuid())); if (!r.ok) return null; const j = await r.json(); return Array.isArray(j.cards) ? j.cards : null; } catch (e) { return null; }
+}
 function loadImage(src) {
   return new Promise((res, rej) => {
     const i = new Image();
@@ -1555,6 +1558,7 @@ function App() {
       }
       setCards(merged);
       if (merged && merged.length) { saveKey(VKEY, merged); saveVaultServer(merged); }
+      else { try { const rec = await ebayRecover(); if (rec && rec.length) { merged = rec; setCards(rec); saveKey(VKEY, rec); saveVaultServer(rec); } } catch (e) {} }
       const s = await loadKey(SKEY, {
         ebayConnected: false,
         ebayAccount: "",
@@ -1614,6 +1618,19 @@ function App() {
     ...patch
   } : c));
   const deleteCard = id => setCards(p => p.filter(c => c.id !== id));
+  const recoverFromEbay = async () => {
+    flash("Checking eBay for your listings…");
+    try {
+      const rec = await ebayRecover();
+      if (rec && rec.length) {
+        setCards(prev => {
+          const byId = {}; (prev || []).forEach(c => { if (c && c.id) byId[c.id] = c; }); rec.forEach(c => { if (c && c.id && !byId[c.id]) byId[c.id] = c; });
+          const m = Object.values(byId); saveKey(VKEY, m); saveVaultServer(m); return m;
+        });
+        flash("Recovered " + rec.length + " listing" + (rec.length === 1 ? "" : "s") + " from eBay");
+      } else { flash("No eBay listings found — connect eBay first, then try again"); }
+    } catch (e) { flash("Couldn't reach eBay"); }
+  };
   return React.createElement("div", {
     className: "cf-root"
   }, React.createElement("style", null, STYLES), React.createElement("div", {
@@ -1684,6 +1701,7 @@ function App() {
     ebayConnected: settings.ebayConnected,
     onConnect: () => setShowConnect(true),
     onSample: loadSamples,
+    onRecover: recoverFromEbay,
     updateCard: updateCard,
     deleteCard: deleteCard,
     flash: flash
@@ -2694,6 +2712,8 @@ function MarketRead({
     }
   }, comp.refImageUrl ? React.createElement("img", {
     src: comp.refImageUrl,
+    loading: "lazy",
+    decoding: "async",
     alt: "comped card",
     style: {
       width: 64,
@@ -2844,6 +2864,7 @@ function Vault({
   ebayConnected,
   onConnect,
   onSample,
+  onRecover,
   updateCard,
   deleteCard,
   flash
@@ -2957,8 +2978,8 @@ function Vault({
       fontSize: 13,
       marginTop: 6
     }
-  }, cards.length === 0 ? "Scan your first card to start building your vault." : "Try a different filter or search."), cards.length === 0 && React.createElement("button", {
-    className: "btn btn-money",
+  }, cards.length === 0 ? "Scan your first card to start building your vault." : "Try a different filter or search."), ebayConnected && cards.length === 0 && rce("button", { className: "btn btn-money", style: { width: "auto", marginTop: 16 }, onClick: onRecover }, rce(RotateCcw, { size: 15 }), " Recover from eBay"), cards.length === 0 && React.createElement("button", {
+    className: ebayConnected ? "btn btn-ghost" : "btn btn-money",
     style: {
       width: "auto",
       marginTop: 16
@@ -2973,6 +2994,8 @@ function Vault({
   }, cardImg(c) ? React.createElement("img", {
     className: "vthumb",
     src: cardImg(c),
+    loading: "lazy",
+    decoding: "async",
     alt: ""
   }) : React.createElement("div", {
     className: "vthumb"
@@ -3134,6 +3157,8 @@ function CardSheet({
       height: 110
     },
     src: cardImg(c),
+    loading: "lazy",
+    decoding: "async",
     alt: ""
   }), React.createElement("div", {
     style: {
@@ -3456,6 +3481,8 @@ function Portfolio({
         height: 56
       },
       src: cardImg(c),
+    loading: "lazy",
+    decoding: "async",
       alt: ""
     }) : React.createElement("div", {
       className: "vthumb",
