@@ -3069,6 +3069,7 @@ function CardSheet({
   const [salePrice, setSalePrice] = useState(String(c.price || ""));
   const [publishing, setPublishing] = useState(false);
   const [pubErr, setPubErr] = useState("");
+  const [confirmDel, setConfirmDel] = useState(false);
   const mv = Number(c.suggestedPrice || c.price || 0);
   const cost = Number(costEdit) || 0;
   const pl = cost > 0 ? round2(netAfterFees(mv) - cost) : null;
@@ -3339,13 +3340,14 @@ function CardSheet({
     }
   }), "Sold", c.soldDate ? " on " + new Date(c.soldDate).toLocaleDateString() : "", "."), React.createElement("button", {
     className: "btn btn-ghost",
-    onClick: () => deleteCard(c.id),
+    onClick: () => { if (confirmDel) { deleteCard(c.id); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3500); } },
     style: {
-      color: "var(--danger)"
+      color: "var(--danger)",
+      borderColor: confirmDel ? "var(--danger)" : undefined
     }
   }, React.createElement(Trash2, {
     size: 15
-  }), " Remove from vault")))));
+  }), confirmDel ? " Tap again to remove" : " Remove from vault")))));
 }
 function Portfolio({
   cards,
