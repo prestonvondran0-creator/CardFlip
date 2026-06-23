@@ -1131,19 +1131,15 @@ const SAMPLES = [{
   soldPrice: 99
 }];
 const rce = React.createElement;
+const IDENTIFY_PROMPT = "You are an expert sports and trading card cataloguer. Identify this card EXACTLY as printed — never guess or embellish. The first image is the FRONT; a second image, if present, is the BACK — use the back to confirm year, set, card number, and serial numbering. Rules: read the player, year, brand (Panini, Topps, Bowman, etc.) and set/product line precisely. The variation field = the exact parallel/insert/refractor name PLUS any serial number exactly as printed (e.g. 'Silver Prizm', 'Red Wave /149', 'Gold /10'); if it is a plain base card with no parallel, use ''. Never invent a parallel. If a serial like /25 is visible you MUST include it in variation. Set isRookie true only if an RC or rookie logo is actually visible. compQuery = a precise eBay search string with year, brand, set, player, card number and variation/serial. confidence = 'high' if you can read the card clearly, 'medium' if partly blurry or obscured, 'low' if mostly guessing. Respond with ONLY a JSON object (no markdown, no commentary) using these keys: identified (boolean), sport, player, year, brand, set, cardNumber, variation, team, isRookie (boolean), conditionEstimate (short, e.g. 'Raw — Near Mint'), conditionNotes (short), compQuery, confidence ('high'|'medium'|'low'). If unreadable, set identified=false, fill best partial guesses, and confidence='low'.";
 async function aiIdentify(frontB64, backB64) {
-  const prompt = "You are an expert sports-card cataloguer and grader. Identify this trading card as precisely as you can from the image(s). The first image is the FRONT of the card; if a second image is provided it is the BACK — use it to confirm card number, set, year, and any serial numbering. " +
-    "Respond with ONLY a JSON object (no markdown, no commentary) using these keys: " +
-    "identified (boolean), sport, player, year, brand, set, cardNumber, variation (parallel/insert/refractor name or ''), " +
-    "team, isRookie (boolean), conditionEstimate (short, e.g. 'Raw — Near Mint'), conditionNotes (short), " +
-    "compQuery (a precise eBay search string to find recent SOLD comps: include player, year, brand, set, card number, variation). " +
-    "If unreadable, set identified=false and fill best partial guesses.";
+  const prompt = IDENTIFY_PROMPT;
   const content = [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frontB64 } }];
   if (backB64) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: backB64 } });
   content.push({ type: "text", text: prompt });
   const text = await anthropic([{ role: "user", content }]);
   const j = extractJSON(text);
-  return { sport: j.sport || "", player: j.player || "", year: j.year || "", brand: j.brand || "", set: j.set || "", cardNumber: j.cardNumber || "", variation: j.variation || "", team: j.team || "", isRookie: !!j.isRookie, conditionEstimate: j.conditionEstimate || "Raw — Near Mint", conditionNotes: j.conditionNotes || "", compQuery: j.compQuery || "" };
+  return { sport: j.sport || "", player: j.player || "", year: j.year || "", brand: j.brand || "", set: j.set || "", cardNumber: j.cardNumber || "", variation: j.variation || "", team: j.team || "", isRookie: !!j.isRookie, conditionEstimate: j.conditionEstimate || "Raw — Near Mint", conditionNotes: j.conditionNotes || "", compQuery: j.compQuery || "", confidence: j.confidence || "medium" };
 }
 async function aiPrice(spec, noteStr) {
   noteStr = (noteStr || "").trim();
@@ -1811,7 +1807,8 @@ function ScanFlow({
     isRookie: false,
     conditionEstimate: "Raw — Near Mint",
     conditionNotes: "",
-    compQuery: ""
+    compQuery: "",
+    confidence: "manual"
   };
   const manualEntry = () => {
     setErr("");
@@ -1867,7 +1864,7 @@ function ScanFlow({
     setBusy("reading");
     setErr("");
     try {
-      const prompt = "You are an expert sports-card cataloguer and grader. Identify this trading card as precisely as you can from the image(s). The first image is the FRONT of the card; if a second image is provided it is the BACK — use it to confirm card number, set, year, and any serial numbering. " + "Respond with ONLY a JSON object (no markdown, no commentary) using these keys: " + "identified (boolean), sport, player, year, brand, set, cardNumber, variation (parallel/insert/refractor name or ''), " + "team, isRookie (boolean), conditionEstimate (short, e.g. 'Raw — Near Mint'), conditionNotes (short), " + "compQuery (a precise eBay search string to find recent SOLD comps: include player, year, brand, set, card number, variation). " + "If unreadable, set identified=false and fill best partial guesses.";
+      const prompt = IDENTIFY_PROMPT;
       const content = [{
         type: "image",
         source: {
@@ -1905,7 +1902,8 @@ function ScanFlow({
         isRookie: !!j.isRookie,
         conditionEstimate: j.conditionEstimate || "Raw — Near Mint",
         conditionNotes: j.conditionNotes || "",
-        compQuery: j.compQuery || ""
+        compQuery: j.compQuery || "",
+        confidence: j.confidence || "medium"
       });
       setStep("identified");
     } catch (e) {
@@ -2380,7 +2378,7 @@ function ScanFlow({
     }
   }, React.createElement("p", {
     className: "eyebrow"
-  }, "Card details"), React.createElement("div", {
+  }, "Confirm the card — fix anything before pricing"), React.createElement("div", {
     className: "display",
     style: {
       fontSize: 19,
@@ -2399,7 +2397,7 @@ function ScanFlow({
     style: {
       marginTop: 8
     }
-  }, spec.isRookie && React.createElement("span", {
+  }, spec.confidence && spec.confidence !== "manual" && React.createElement("span", { className: "tag", style: { color: spec.confidence === "high" ? "var(--money)" : spec.confidence === "low" ? "var(--warn)" : "var(--muted)", borderColor: "var(--hairline)" } }, "AI read: " + spec.confidence), spec.isRookie && React.createElement("span", {
     className: "tag rookie"
   }, "Rookie"), spec.variation && React.createElement("span", {
     className: "tag holo"
