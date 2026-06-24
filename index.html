@@ -853,7 +853,8 @@ async function enhanceImage(dataUrl) {
       d[i] = _clamp8(r); d[i + 1] = _clamp8(g); d[i + 2] = _clamp8(b);
     }
     ctx.putImageData(id, 0, 0);
-    return c.toDataURL("image/jpeg", 0.9);
+    const out = c.toDataURL("image/jpeg", 0.9);
+    return (out && out.length > 2000) ? out : dataUrl;
   } catch {
     return dataUrl;
   }
@@ -2247,8 +2248,9 @@ function ScanFlow({
     }, "Confirm photo"), React.createElement("div", {
       className: "preview-wrap"
     }, React.createElement("img", {
-      src: chosenFrontUrl,
-      alt: "card"
+      src: chosenFrontUrl || previewUrl,
+      alt: "card",
+      onError: e => { const fb = previewUrl || frontOrig; if (fb && e.target && e.target.src !== fb) e.target.src = fb; }
     })), React.createElement("div", {
       className: "cap-row section"
     }, React.createElement("button", {
