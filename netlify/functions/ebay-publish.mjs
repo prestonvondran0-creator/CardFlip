@@ -95,6 +95,7 @@ export default async (req) => {
 
   const itemBody = {
     availability: { shipToLocationAvailability: { quantity: 1 } },
+    packageWeightAndSize: { packageType: "PACKAGE_THICK_ENVELOPE", weight: { value: Number(process.env.EBAY_PKG_OZ || card.packageOz || 3), unit: "OUNCE" } },
     condition,
     ...(isLot ? {} : { conditionDescriptors: [{ name: "40001", values: [cardCondValueId] }] }),
     product: {

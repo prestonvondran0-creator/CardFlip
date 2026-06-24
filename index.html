@@ -3851,6 +3851,17 @@ function ConnectSheet({
   settings,
   onClose
 }) {
+  const [polMsg, setPolMsg] = useState("");
+  const [polBusy, setPolBusy] = useState(false);
+  const applyPolicies = async () => {
+    setPolBusy(true); setPolMsg("");
+    try {
+      const r = await fetch("/.netlify/functions/ebay-policies?uid=" + encodeURIComponent(cfuid()), { method: "POST" });
+      const j = await r.json();
+      setPolMsg(r.ok && j.ok ? "Done — buyer pays exact shipping, no returns, immediate payment required." : ("Couldn't set policies: " + (j.detail || j.error || "error")));
+    } catch (e) { setPolMsg("Couldn't reach eBay. Try again."); }
+    setPolBusy(false);
+  };
   return React.createElement("div", {
     className: "scrim",
     onClick: onClose
@@ -3883,9 +3894,14 @@ function ConnectSheet({
       color: "var(--money)"
     }
   }), React.createElement("span", null, "Your eBay seller account is linked. Listing a card publishes it live on eBay.")), React.createElement("button", {
+    className: "btn btn-money",
+    style: { marginTop: 14 },
+    onClick: applyPolicies,
+    disabled: polBusy
+  }, polBusy ? React.createElement(Loader2, { size: 15, className: "spin" }) : React.createElement(ShieldCheck, { size: 15 }), " ", polBusy ? "Setting policies…" : "Set listing policies (buyer-paid shipping, no returns)"), polMsg ? React.createElement("div", { className: "note", style: { marginTop: 10 } }, React.createElement("span", null, polMsg)) : null, React.createElement("button", {
     className: "btn btn-ghost",
     style: {
-      marginTop: 16,
+      marginTop: 12,
       color: "var(--danger)"
     },
     onClick: () => {
