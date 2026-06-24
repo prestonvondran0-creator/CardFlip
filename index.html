@@ -810,7 +810,7 @@ async function ebayRecover() {
 function loadImage(src) {
   return new Promise((res, rej) => {
     const i = new Image();
-    i.onload = () => res(i);
+    i.onload = () => { try { if (i.decode) { i.decode().then(() => res(i)).catch(() => res(i)); } else res(i); } catch (e) { res(i); } };
     i.onerror = rej;
     i.src = src;
   });
@@ -852,6 +852,10 @@ async function enhanceImage(dataUrl) {
       r = gray + (r - gray) * sat; g = gray + (g - gray) * sat; b = gray + (b - gray) * sat;
       d[i] = _clamp8(r); d[i + 1] = _clamp8(g); d[i + 2] = _clamp8(b);
     }
+    let ob = 0, sc = 0;
+    for (let i = 0; i < d.length; i += 4 * 97) { ob += d[i] + d[i + 1] + d[i + 2]; sc++; }
+    const outAvg = sc ? ob / (sc * 3) : 0;
+    if (avg > 14 && outAvg < 8) return dataUrl;
     ctx.putImageData(id, 0, 0);
     const out = c.toDataURL("image/jpeg", 0.9);
     return (out && out.length > 2000) ? out : dataUrl;
