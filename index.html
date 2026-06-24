@@ -1839,10 +1839,10 @@ function ScanFlow({
   function compKey(sp, note) { return ((sp.compQuery || [sp.year, sp.brand, sp.set, sp.player, sp.cardNumber, sp.variation].filter(Boolean).join(" ")) + "|" + (note || "")).trim().toLowerCase(); }
   useEffect(() => {
     if (step !== "priced") return;
-    const f = frontChoice === "nobg" ? bgRemoved : frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig);
+    const f = frontChoice === "nobg" ? (bgRemoved || frontOrig) : frontOrig;
     if (f) hostImage(f);
     if (backB64) hostImage("data:image/jpeg;base64," + backB64);
-  }, [step, frontChoice, frontEnhanced, bgRemoved]);
+  }, [step, frontChoice, frontOrig, bgRemoved]);
   const reset = () => {
     setStep("idle");
     setBusy(null);
@@ -1913,7 +1913,7 @@ function ScanFlow({
       setBgMsg("");
       setFrontChoice("enhanced");
       setStep("preview");
-      setFrontEnhanced(await enhanceImage(big));
+      setFrontEnhanced(big);
     } catch {
       setErr("Couldn't read that image. Try another photo.");
     }
@@ -2012,7 +2012,7 @@ function ScanFlow({
   async function save(asListed) {
     setBusy(asListed ? "publishing" : "saving");
     setErr("");
-    const frontImg = frontChoice === "nobg" ? bgRemoved : frontChoice === "original" ? frontOrig : (frontEnhanced || frontOrig);
+    const frontImg = frontChoice === "nobg" ? (bgRemoved || frontOrig) : frontOrig;
     const imageUrls = [];
     try {
       if (frontImg) { const u = await hostImage(frontImg); if (u) imageUrls.push(u); }
@@ -2235,8 +2235,9 @@ function ScanFlow({
     }, "Confirm photo"), React.createElement("div", {
       className: "preview-wrap"
     }, React.createElement("img", {
-      src: chosenFrontUrl || previewUrl,
+      src: (frontChoice === "nobg" ? (bgRemoved || frontOrig || previewUrl) : (frontOrig || previewUrl)),
       alt: "card",
+      style: { filter: frontChoice === "enhanced" ? "saturate(1.2) contrast(1.12) brightness(1.04)" : "none" },
       onError: e => { const fb = previewUrl || frontOrig; if (fb && e.target && e.target.src !== fb) e.target.src = fb; }
     })), React.createElement("div", {
       className: "cap-row section"
