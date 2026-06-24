@@ -836,30 +836,13 @@ async function enhanceImage(dataUrl) {
     const c = document.createElement("canvas");
     c.width = w; c.height = h;
     const ctx = c.getContext("2d");
+    // Use a canvas filter (same reliable drawImage path the original photo uses) instead of
+    // getImageData/putImageData, which returns black on some iOS devices.
+    try { if ("filter" in ctx) ctx.filter = "saturate(1.18) contrast(1.10) brightness(1.04)"; } catch (e) {}
     ctx.drawImage(img, 0, 0, w, h);
-    const id = ctx.getImageData(0, 0, w, h);
-    const d = id.data;
-    let rs = 0, gs = 0, bs = 0;
-    const n = d.length / 4;
-    for (let i = 0; i < d.length; i += 4) { rs += d[i]; gs += d[i + 1]; bs += d[i + 2]; }
-    const ra = rs / n, ga = gs / n, ba = bs / n, avg = (ra + ga + ba) / 3;
-    const kr = ra ? avg / ra : 1, kg = ga ? avg / ga : 1, kb = ba ? avg / ba : 1;
-    const contrast = 1.12, sat = 1.12;
-    for (let i = 0; i < d.length; i += 4) {
-      let r = d[i] * kr, g = d[i + 1] * kg, b = d[i + 2] * kb;
-      r = (r - 128) * contrast + 128; g = (g - 128) * contrast + 128; b = (b - 128) * contrast + 128;
-      const gray = r * 0.299 + g * 0.587 + b * 0.114;
-      r = gray + (r - gray) * sat; g = gray + (g - gray) * sat; b = gray + (b - gray) * sat;
-      d[i] = _clamp8(r); d[i + 1] = _clamp8(g); d[i + 2] = _clamp8(b);
-    }
-    let ob = 0, sc = 0;
-    for (let i = 0; i < d.length; i += 4 * 97) { ob += d[i] + d[i + 1] + d[i + 2]; sc++; }
-    const outAvg = sc ? ob / (sc * 3) : 0;
-    if (avg > 14 && outAvg < 8) return dataUrl;
-    ctx.putImageData(id, 0, 0);
     const out = c.toDataURL("image/jpeg", 0.9);
     return (out && out.length > 2000) ? out : dataUrl;
-  } catch {
+  } catch (e) {
     return dataUrl;
   }
 }
