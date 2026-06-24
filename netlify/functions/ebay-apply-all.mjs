@@ -50,7 +50,7 @@ export default async (req) => {
       const pub = offers.find(o => o.status === "PUBLISHED" || o.listing || o.listingId);
       if (!pub || !pub.offerId) return null;
       const lp = pub.listingPolicies || {};
-      const ok = lp.fulfillmentPolicyId === target.fulfillmentPolicyId && lp.paymentPolicyId === target.paymentPolicyId && lp.returnPolicyId === target.returnPolicyId;
+      const ok = lp.fulfillmentPolicyId === target.fulfillmentPolicyId && lp.paymentPolicyId === target.paymentPolicyId && lp.returnPolicyId === target.returnPolicyId && lp.bestOfferTerms && lp.bestOfferTerms.bestOfferEnabled === true;
       return { sku, offer: pub, ok };
     } catch (e) { return null; }
   });
@@ -65,7 +65,7 @@ export default async (req) => {
 
   async function putOffer(offer) {
     const body = { ...offer }; delete body.offerId; delete body.listing; delete body.status; delete body.listingId;
-    body.listingPolicies = { ...(body.listingPolicies || {}), ...target };
+    body.listingPolicies = { ...(body.listingPolicies || {}), ...target, bestOfferTerms: { bestOfferEnabled: true } };
     return ebayFetch(`/sell/inventory/v1/offer/${offer.offerId}`, { method: "PUT", token, body });
   }
   async function ensureWeight(sku) {
