@@ -37,7 +37,7 @@ export default async (req) => {
     try {
       const r = await ebayFetch(`/sell/inventory/v1/offer?sku=${encodeURIComponent(it.sku)}&marketplace_id=${MARKETPLACE}`, { token });
       const offers = (r.ok && r.json.offers) || [];
-      const pub = offers.find(o => (o.status === "PUBLISHED") || o.listingId || (o.listing && o.listing.listingId));
+      const pub = offers.find(o => o.status === "PUBLISHED");
       if (!pub) return null;
       const listingId = pub.listingId || (pub.listing && pub.listing.listingId) || "";
       const price = Number(pub.pricingSummary && pub.pricingSummary.price && pub.pricingSummary.price.value) || 0;
