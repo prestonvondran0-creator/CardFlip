@@ -51,7 +51,7 @@ export default async (req) => {
       { name: "CardFlip No Returns", marketplaceId: MARKETPLACE, categoryTypes: cat, returnsAccepted: false });
 
     const fName = "CardFlip Buyer-Paid Shipping";
-    const baseF = { name: fName, marketplaceId: MARKETPLACE, categoryTypes: cat, handlingTime: { value: 1, unit: "DAY" } };
+    const baseF = { name: fName, marketplaceId: MARKETPLACE, categoryTypes: cat, handlingTime: { value: 1, unit: "DAY" }, globalShipping: false, localPickup: false, freightShipping: false, pickupDropOff: false };
     const svc = (code) => ({ sortOrder: 1, shippingCarrierCode: "USPS", shippingServiceCode: code, freeShipping: false });
     const flat = (code) => ({ sortOrder: 1, shippingCarrierCode: "USPS", shippingServiceCode: code, freeShipping: false, shippingCost: { value: "5.00", currency: "USD" } });
     const candidates = [
