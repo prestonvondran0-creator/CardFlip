@@ -8,6 +8,7 @@ import { getAccessToken, ebayFetch, MARKETPLACE, uidFrom, store } from "../../eb
 
 function json(o, s) { return new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json" } }); }
 function errText(j) { return (j && j.errors && j.errors.length) ? j.errors.map(e => (e.longMessage || e.message) + (e.parameters ? (" [" + e.parameters.map(p => p.name + "=" + p.value).join(", ") + "]") : "")).join(" | ") : JSON.stringify(j); }
+function noChange(j) { return !!(j && j.errors && j.errors.some(e => /same as in the system|no change|not modified|nothing to update/i.test((e.longMessage || e.message) || ""))); }
 
 async function getOrCreate(token, kind, listKey, idKey, name, body) {
   const list = await ebayFetch(`/sell/account/v1/${kind}?marketplace_id=${MARKETPLACE}`, { token });
@@ -15,7 +16,7 @@ async function getOrCreate(token, kind, listKey, idKey, name, body) {
   const existing = arr.find(p => p && p.name === name);
   if (existing && existing[idKey]) {
     const up = await ebayFetch(`/sell/account/v1/${kind}/${existing[idKey]}`, { method: "PUT", token, body });
-    if (!up.ok && up.status !== 204) throw new Error(kind + " update failed: " + errText(up.json));
+    if (!up.ok && up.status !== 204 && !noChange(up.json)) throw new Error(kind + " update failed: " + errText(up.json));
     return existing[idKey];
   }
   const cr = await ebayFetch(`/sell/account/v1/${kind}`, { method: "POST", token, body });
@@ -23,7 +24,7 @@ async function getOrCreate(token, kind, listKey, idKey, name, body) {
     const dup = cr.json && cr.json.errors && cr.json.errors[0] && cr.json.errors[0].parameters && cr.json.errors[0].parameters.find(pp => /duplicate/i.test(pp.name) && pp.value);
     if (dup) {
       const up = await ebayFetch(`/sell/account/v1/${kind}/${dup.value}`, { method: "PUT", token, body });
-      if (!up.ok && up.status !== 204) throw new Error(kind + " update(dup) failed: " + errText(up.json));
+      if (!up.ok && up.status !== 204 && !noChange(up.json)) throw new Error(kind + " update(dup) failed: " + errText(up.json));
       return dup.value;
     }
     throw new Error(kind + " create failed: " + errText(cr.json));
