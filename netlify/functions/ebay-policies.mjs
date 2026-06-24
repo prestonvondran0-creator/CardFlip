@@ -7,7 +7,7 @@
 import { getAccessToken, ebayFetch, MARKETPLACE, uidFrom, store } from "../../ebay-lib.mjs";
 
 function json(o, s) { return new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json" } }); }
-function errText(j) { return (j && j.errors && j.errors.length) ? j.errors.map(e => e.message).join("; ") : JSON.stringify(j); }
+function errText(j) { return (j && j.errors && j.errors.length) ? j.errors.map(e => (e.longMessage || e.message) + (e.parameters ? (" [" + e.parameters.map(p => p.name + "=" + p.value).join(", ") + "]") : "")).join(" | ") : JSON.stringify(j); }
 
 async function getOrCreate(token, kind, listKey, idKey, name, body) {
   const list = await ebayFetch(`/sell/account/v1/${kind}?marketplace_id=${MARKETPLACE}`, { token });
