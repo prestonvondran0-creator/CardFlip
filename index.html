@@ -715,7 +715,7 @@ a.lnk{color:var(--indigo);text-decoration:none;font-weight:600;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .skel{background:var(--raised);border-radius:10px;animation:skelp 1.3s ease-in-out infinite;}
 @keyframes skelp{0%,100%{opacity:.4}50%{opacity:.8}}
-.vrow{transition:border-color .15s,transform .12s;content-visibility:auto;contain-intrinsic-size:0 84px;}
+.vrow{transition:border-color .15s,transform .12s;}
 .vrow:active{transform:scale(.995);}
 .btn{transition:transform .1s,background .15s,border-color .15s,opacity .15s;}
 .btn:active{transform:scale(.97);}
@@ -2914,7 +2914,7 @@ function Vault({
     const pf = c => Number(c.cost) > 0 ? (netAfterFees(Number(c.soldPrice || c.price) || 0) - Number(c.cost)) : -Infinity;
     shown = shown.slice().sort((a, b) => sort === "value" ? ((Number(b.suggestedPrice || b.price) || 0) - (Number(a.suggestedPrice || a.price) || 0)) : (pf(b) - pf(a)));
   }
-  const openCard = open ? cards.find(c => c.id === open) : null;
+  const openCard = open ? (cards.find(c => c.id === (open && open.id)) || open) : null;
   return React.createElement("div", {
     className: "section",
     style: {
@@ -3019,7 +3019,7 @@ function Vault({
   }), " Load sample cards")) : shown.map(c => React.createElement("div", {
     className: "vrow",
     key: c.id,
-    onClick: () => setOpen(c.id)
+    onClick: () => setOpen(c)
   }, cardImg(c) ? React.createElement("img", {
     className: "vthumb",
     src: cardImg(c),
@@ -3037,8 +3037,8 @@ function Vault({
       gap: 8
     }
   }, React.createElement("span", {
-    className: "badge " + STATUS[c.status].cls
-  }, STATUS[c.status].label), c.confidence && React.createElement("span", {
+    className: "badge " + (STATUS[c.status] || STATUS.listed || { cls: "" }).cls
+  }, (STATUS[c.status] || STATUS.listed || { label: "Card" }).label), c.confidence && React.createElement("span", {
     style: {
       fontSize: 10.5,
       color: "var(--faint)",
@@ -3170,8 +3170,8 @@ function CardSheet({
       alignItems: "flex-start"
     }
   }, React.createElement("div", null, React.createElement("span", {
-    className: "badge " + STATUS[c.status].cls
-  }, STATUS[c.status].label), React.createElement("h2", {
+    className: "badge " + (STATUS[c.status] || STATUS.listed || { cls: "" }).cls
+  }, (STATUS[c.status] || STATUS.listed || { label: "Card" }).label), React.createElement("h2", {
     style: {
       marginTop: 9
     }
