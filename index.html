@@ -684,7 +684,8 @@ const STYLES = `
 /* modal */
 .scrim{position:fixed;inset:0;background:rgba(6,8,11,.7);backdrop-filter:blur(3px);z-index:40;display:flex;align-items:flex-end;justify-content:center;}
 .sheet{width:100%;max-width:480px;background:var(--bg);border-top-left-radius:22px;border-top-right-radius:22px;
-  border:1px solid var(--hairline);padding:22px 20px 28px;animation:rise .22s ease;}
+  border:1px solid var(--hairline);padding:22px 20px calc(28px + env(safe-area-inset-bottom));animation:rise .22s ease;
+  max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 @keyframes rise{from{transform:translateY(30px);opacity:.4}to{transform:translateY(0);opacity:1}}
 .sheet h2{font-family:'Oswald';font-weight:700;font-size:21px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.02em;}
 
@@ -3353,7 +3354,7 @@ function CardSheet({
     onClick: onConnect
   }, React.createElement(Link2, {
     size: 16
-  }), " Connect eBay to list")), (c.status === "draft" || c.status === "listed") && React.createElement("button", {
+  }), " Connect eBay to list")), c.status !== "sold" && React.createElement("button", {
     className: "btn btn-ghost",
     onClick: () => setSelling(true)
   }, React.createElement(Check, {
