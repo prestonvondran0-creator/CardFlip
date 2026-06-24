@@ -116,7 +116,7 @@ export default async (req) => {
     availableQuantity: 1,
     categoryId,
     listingDescription: card.description || title,
-    listingPolicies: { fulfillmentPolicyId: fulfillmentId, paymentPolicyId: paymentId, returnPolicyId: returnId },
+    listingPolicies: { fulfillmentPolicyId: fulfillmentId, paymentPolicyId: paymentId, returnPolicyId: returnId, bestOfferTerms: { bestOfferEnabled: true } },
     pricingSummary: { price: { value: price.toFixed(2), currency: CURRENCY } },
     merchantLocationKey: locationKey,
   };
