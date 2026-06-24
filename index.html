@@ -1657,11 +1657,17 @@ function App() {
     try {
       const rec = await ebayRecover();
       if (rec && rec.length) {
+        let added = 0, soldN = 0;
         setCards(prev => {
-          const byId = {}; (prev || []).forEach(c => { if (c && c.id) byId[c.id] = c; }); rec.forEach(c => { if (c && c.id && !byId[c.id]) byId[c.id] = c; });
+          const byId = {}; (prev || []).forEach(c => { if (c && c.id) byId[c.id] = c; });
+          rec.forEach(c => {
+            if (!c || !c.id) return;
+            if (c.status === "sold") { byId[c.id] = Object.assign({}, byId[c.id] || {}, c, { cost: (byId[c.id] && byId[c.id].cost != null) ? byId[c.id].cost : (c.cost != null ? c.cost : null) }); soldN++; }
+            else if (!byId[c.id]) { byId[c.id] = c; added++; }
+          });
           const m = Object.values(byId); saveKey(VKEY, m); saveVaultServer(m); return m;
         });
-        flash("Recovered " + rec.length + " listing" + (rec.length === 1 ? "" : "s") + " from eBay");
+        flash("Synced from eBay — " + added + " new, " + soldN + " sold");
       } else { flash("No eBay listings found — connect eBay first, then try again"); }
     } catch (e) { flash("Couldn't reach eBay"); }
   };
@@ -2956,7 +2962,7 @@ function Vault({
     }
   }), React.createElement("span", null, "Connect your eBay account to push drafts live in one tap. ", React.createElement("a", {
     className: "lnk"
-  }, "Connect →"))), React.createElement("div", {
+  }, "Connect →"))), ebayConnected && onRecover ? React.createElement("button", { className: "btn btn-ghost btn-sm", style: { width: "auto", marginBottom: 10 }, onClick: onRecover }, React.createElement(RotateCcw, { size: 14 }), " Sync from eBay") : null, React.createElement("div", {
     className: "searchbox"
   }, React.createElement(Search, {
     size: 16,
@@ -3075,6 +3081,7 @@ function CardSheet({
   flash
 }) {
   const [costEdit, setCostEdit] = useState(c.cost != null ? String(c.cost) : "");
+  const [showEdit, setShowEdit] = useState(false);
   const [selling, setSelling] = useState(false);
   const [salePrice, setSalePrice] = useState(String(c.price || ""));
   const [publishing, setPublishing] = useState(false);
@@ -3239,7 +3246,7 @@ function CardSheet({
     className: "btn btn-money btn-sm",
     style: { width: "auto", marginLeft: 8, whiteSpace: "nowrap" },
     onClick: applyCost
-  }, costSaved ? "Saved \u2713" : "Apply")), pl !== null && c.status !== "sold" && React.createElement("div", {
+  }, costSaved ? "Saved \u2713" : "Apply")), React.createElement("button", { className: "btn btn-ghost btn-sm", style: { width: "auto", marginTop: 14 }, onClick: () => setShowEdit(v => !v) }, React.createElement(Pencil, { size: 14 }), " ", showEdit ? "Hide editing" : "Edit card details"), showEdit && React.createElement("div", { className: "card-surface section" }, React.createElement("div", { className: "spec-grid" }, React.createElement(Field, { label: "Player", v: c.player || "", on: v => updateCard(c.id, { player: v }) }), React.createElement(Field, { label: "Year", v: c.year || "", on: v => updateCard(c.id, { year: v }) }), React.createElement(Field, { label: "Brand", v: c.brand || "", on: v => updateCard(c.id, { brand: v }) }), React.createElement(Field, { label: "Set", v: c.set || "", on: v => updateCard(c.id, { set: v }) }), React.createElement(Field, { label: "Card #", v: c.cardNumber || "", on: v => updateCard(c.id, { cardNumber: v }) }), React.createElement(Field, { label: "Parallel / insert", v: c.variation || "", on: v => updateCard(c.id, { variation: v }) }), React.createElement("div", { className: "field full" }, React.createElement("label", null, "Title (eBay)"), React.createElement("input", { value: c.title || "", onChange: e => updateCard(c.id, { title: e.target.value }) })), React.createElement("div", { className: "field full" }, React.createElement("label", null, "Price ($)"), React.createElement("input", { type: "number", inputMode: "decimal", value: c.price != null ? c.price : "", onChange: e => updateCard(c.id, { price: e.target.value === "" ? 0 : Number(e.target.value) }) }))), React.createElement("div", { style: { fontSize: 11, color: "var(--faint)", marginTop: 8, lineHeight: 1.45 } }, "Edits save to your vault instantly. For a card already live on eBay, changing the price here won\u2019t update the eBay listing automatically.")), pl !== null && c.status !== "sold" && React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",

@@ -61,6 +61,23 @@ export default async (req) => {
     } catch (e) { return null; }
   });
 
-  const cards = built.filter(Boolean);
-  return json({ cards, scanned: items.length, recovered: cards.length });
+  let cards = built.filter(Boolean);
+
+  // best-effort: pull recent SOLD orders (needs sell.fulfillment scope) so the vault reflects sales
+  let sold = 0;
+  try {
+    const or = await ebayFetch(`/sell/fulfillment/v1/order?limit=200`, { token });
+    const orders = (or.ok && or.json.orders) || [];
+    for (const o of orders) {
+      for (const li of (o.lineItems || [])) {
+        const sku = li.sku || "";
+        const id = sku ? String(sku).replace(/^CF-/, "") : ("order-" + (li.lineItemId || Math.random().toString(36).slice(2)));
+        const price = Number(li.lineItemCost && li.lineItemCost.value) || Number(li.total && li.total.value) || 0;
+        cards.push({ id, sku, title: li.title || sku, player: "", price, suggestedPrice: price, status: "sold", soldPrice: price, soldDate: o.creationDate || new Date().toISOString(), recovered: true });
+        sold++;
+      }
+    }
+  } catch (e) {}
+
+  return json({ cards, scanned: items.length, recovered: cards.length, sold });
 };
