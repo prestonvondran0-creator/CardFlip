@@ -3049,7 +3049,7 @@ function Vault({
     style: {
       marginTop: 6
     }
-  }, c.player || "Unknown"), React.createElement("div", {
+  }, c.player || c.title || "Unknown"), React.createElement("div", {
     className: "sub"
   }, [c.year, c.brand, c.set].filter(Boolean).join(" "), c.variation ? " · " + c.variation : ""), React.createElement("div", {
     className: "pr"
@@ -3071,6 +3071,12 @@ function Vault({
     flash: flash
   }));
 }
+async function aiParseTitle(title) {
+  const prompt = "Parse this sports/trading card listing title into structured fields. Title: \"" + title + "\". Respond with ONLY a JSON object: {player, year, brand, set, cardNumber, variation, sport}. variation = the parallel/insert name plus any serial number (e.g. 'Red Wave /149'). Use empty string for anything unknown.";
+  const t = await anthropic([{ role: "user", content: prompt }], null, 400);
+  const j = extractJSON(t);
+  return { player: j.player || "", year: j.year || "", brand: j.brand || "", set: j.set || "", cardNumber: j.cardNumber || "", variation: j.variation || "", sport: j.sport || "" };
+}
 function CardSheet({
   c,
   ebayConnected,
@@ -3082,6 +3088,14 @@ function CardSheet({
 }) {
   const [costEdit, setCostEdit] = useState(c.cost != null ? String(c.cost) : "");
   const [showEdit, setShowEdit] = useState(false);
+  const [filling, setFilling] = useState(false);
+  const fillFromTitle = async () => {
+    if (!c.title) return;
+    setFilling(true);
+    try { const f = await aiParseTitle(c.title); updateCard(c.id, f); flash("Filled details from title"); }
+    catch (e) { flash("Couldn't read the title (" + ((e && e.message) || "") + ")"); }
+    setFilling(false);
+  };
   const [selling, setSelling] = useState(false);
   const [salePrice, setSalePrice] = useState(String(c.price || ""));
   const [publishing, setPublishing] = useState(false);
@@ -3160,7 +3174,7 @@ function CardSheet({
     style: {
       marginTop: 9
     }
-  }, c.player || "Unknown"), React.createElement("p", {
+  }, c.player || c.title || "Unknown"), React.createElement("p", {
     style: {
       color: "var(--muted)",
       fontSize: 13,
@@ -3246,7 +3260,7 @@ function CardSheet({
     className: "btn btn-money btn-sm",
     style: { width: "auto", marginLeft: 8, whiteSpace: "nowrap" },
     onClick: applyCost
-  }, costSaved ? "Saved \u2713" : "Apply")), React.createElement("button", { className: "btn btn-ghost btn-sm", style: { width: "auto", marginTop: 14 }, onClick: () => setShowEdit(v => !v) }, React.createElement(Pencil, { size: 14 }), " ", showEdit ? "Hide editing" : "Edit card details"), showEdit && React.createElement("div", { className: "card-surface section" }, React.createElement("div", { className: "spec-grid" }, React.createElement(Field, { label: "Player", v: c.player || "", on: v => updateCard(c.id, { player: v }) }), React.createElement(Field, { label: "Year", v: c.year || "", on: v => updateCard(c.id, { year: v }) }), React.createElement(Field, { label: "Brand", v: c.brand || "", on: v => updateCard(c.id, { brand: v }) }), React.createElement(Field, { label: "Set", v: c.set || "", on: v => updateCard(c.id, { set: v }) }), React.createElement(Field, { label: "Card #", v: c.cardNumber || "", on: v => updateCard(c.id, { cardNumber: v }) }), React.createElement(Field, { label: "Parallel / insert", v: c.variation || "", on: v => updateCard(c.id, { variation: v }) }), React.createElement("div", { className: "field full" }, React.createElement("label", null, "Title (eBay)"), React.createElement("input", { value: c.title || "", onChange: e => updateCard(c.id, { title: e.target.value }) })), React.createElement("div", { className: "field full" }, React.createElement("label", null, "Price ($)"), React.createElement("input", { type: "number", inputMode: "decimal", value: c.price != null ? c.price : "", onChange: e => updateCard(c.id, { price: e.target.value === "" ? 0 : Number(e.target.value) }) }))), React.createElement("div", { style: { fontSize: 11, color: "var(--faint)", marginTop: 8, lineHeight: 1.45 } }, "Edits save to your vault instantly. For a card already live on eBay, changing the price here won\u2019t update the eBay listing automatically.")), pl !== null && c.status !== "sold" && React.createElement("div", {
+  }, costSaved ? "Saved \u2713" : "Apply")), (c.title && !c.player) ? React.createElement("button", { className: "btn btn-money btn-sm", style: { width: "auto", marginTop: 14, marginRight: 8 }, onClick: fillFromTitle, disabled: filling }, filling ? React.createElement(Loader2, { size: 14, className: "spin" }) : React.createElement(Sparkles, { size: 14 }), " ", filling ? "Reading…" : "Fill details from title") : null, React.createElement("button", { className: "btn btn-ghost btn-sm", style: { width: "auto", marginTop: 14 }, onClick: () => setShowEdit(v => !v) }, React.createElement(Pencil, { size: 14 }), " ", showEdit ? "Hide editing" : "Edit card details"), showEdit && React.createElement("div", { className: "card-surface section" }, React.createElement("div", { className: "spec-grid" }, React.createElement(Field, { label: "Player", v: c.player || "", on: v => updateCard(c.id, { player: v }) }), React.createElement(Field, { label: "Year", v: c.year || "", on: v => updateCard(c.id, { year: v }) }), React.createElement(Field, { label: "Brand", v: c.brand || "", on: v => updateCard(c.id, { brand: v }) }), React.createElement(Field, { label: "Set", v: c.set || "", on: v => updateCard(c.id, { set: v }) }), React.createElement(Field, { label: "Card #", v: c.cardNumber || "", on: v => updateCard(c.id, { cardNumber: v }) }), React.createElement(Field, { label: "Parallel / insert", v: c.variation || "", on: v => updateCard(c.id, { variation: v }) }), React.createElement("div", { className: "field full" }, React.createElement("label", null, "Title (eBay)"), React.createElement("input", { value: c.title || "", onChange: e => updateCard(c.id, { title: e.target.value }) })), React.createElement("div", { className: "field full" }, React.createElement("label", null, "Price ($)"), React.createElement("input", { type: "number", inputMode: "decimal", value: c.price != null ? c.price : "", onChange: e => updateCard(c.id, { price: e.target.value === "" ? 0 : Number(e.target.value) }) }))), React.createElement("div", { style: { fontSize: 11, color: "var(--faint)", marginTop: 8, lineHeight: 1.45 } }, "Edits save to your vault instantly. For a card already live on eBay, changing the price here won\u2019t update the eBay listing automatically.")), pl !== null && c.status !== "sold" && React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
@@ -3536,7 +3550,7 @@ function Portfolio({
         fontSize: 14,
         fontWeight: 600
       }
-    }, c.player || "Unknown"), React.createElement("div", {
+    }, c.player || c.title || "Unknown"), React.createElement("div", {
       className: "cv"
     }, cost > 0 ? fmt(cost) + " → " + fmt(v) : "Cost not set · " + fmt(v))), pl !== null ? React.createElement("span", {
       className: "plpill " + (pl >= 0 ? "pos" : "neg")
