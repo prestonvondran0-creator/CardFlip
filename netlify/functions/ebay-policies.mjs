@@ -49,19 +49,22 @@ export default async (req) => {
       "CardFlip No Returns",
       { name: "CardFlip No Returns", marketplaceId: MARKETPLACE, categoryTypes: cat, returnsAccepted: false });
 
-    const fulfillmentId = await getOrCreate(token, "fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId",
-      "CardFlip Buyer-Paid Shipping",
-      {
-        name: "CardFlip Buyer-Paid Shipping",
-        marketplaceId: MARKETPLACE,
-        categoryTypes: cat,
-        handlingTime: { value: 1, unit: "DAY" },
-        shippingOptions: [{
-          optionType: "DOMESTIC",
-          costType: "CALCULATED",
-          shippingServices: [{ sortOrder: 1, shippingServiceCode: "USPSGroundAdvantage", freeShipping: false }],
-        }],
-      });
+    const fName = "CardFlip Buyer-Paid Shipping";
+    const baseF = { name: fName, marketplaceId: MARKETPLACE, categoryTypes: cat, handlingTime: { value: 1, unit: "DAY" } };
+    const svc = (code) => ({ sortOrder: 1, shippingCarrierCode: "USPS", shippingServiceCode: code, freeShipping: false });
+    const flat = (code) => ({ sortOrder: 1, shippingCarrierCode: "USPS", shippingServiceCode: code, freeShipping: false, shippingCost: { value: "5.00", currency: "USD" } });
+    const candidates = [
+      { ...baseF, shippingOptions: [{ optionType: "DOMESTIC", costType: "CALCULATED", shippingServices: [svc("USPSGroundAdvantage")] }] },
+      { ...baseF, shippingOptions: [{ optionType: "DOMESTIC", costType: "CALCULATED", shippingServices: [svc("USPSPriority")] }] },
+      { ...baseF, shippingOptions: [{ optionType: "DOMESTIC", costType: "FLAT_RATE", shippingServices: [flat("USPSGroundAdvantage")] }] },
+      { ...baseF, shippingOptions: [{ optionType: "DOMESTIC", costType: "FLAT_RATE", shippingServices: [flat("USPSPriority")] }] },
+    ];
+    let fulfillmentId = null, shipMode = "", lastShipErr = "";
+    for (let ci = 0; ci < candidates.length; ci++) {
+      try { fulfillmentId = await getOrCreate(token, "fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId", fName, candidates[ci]); shipMode = candidates[ci].shippingOptions[0].costType; break; }
+      catch (e) { lastShipErr = (e && e.message) || String(e); }
+    }
+    if (!fulfillmentId) throw new Error("shipping policy: " + lastShipErr);
 
     let locationKey = "";
     try {
@@ -72,7 +75,7 @@ export default async (req) => {
     // Pin these into the publish config cache so every listing uses them.
     try { await store().setJSON("ebay_cfg:" + (uid || ""), { fulfillmentId, paymentId, returnId, locationKey }); } catch {}
 
-    return json({ ok: true, fulfillmentId, paymentId, returnId, locationKey, pkgOz });
+    return json({ ok: true, fulfillmentId, paymentId, returnId, locationKey, pkgOz, shipMode });
   } catch (e) {
     return json({ error: "Couldn't set policies", detail: String(e && e.message || e) }, 500);
   }
