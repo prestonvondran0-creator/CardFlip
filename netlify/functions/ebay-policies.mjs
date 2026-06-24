@@ -19,7 +19,15 @@ async function getOrCreate(token, kind, listKey, idKey, name, body) {
     return existing[idKey];
   }
   const cr = await ebayFetch(`/sell/account/v1/${kind}`, { method: "POST", token, body });
-  if (!cr.ok) throw new Error(kind + " create failed: " + errText(cr.json));
+  if (!cr.ok) {
+    const dup = cr.json && cr.json.errors && cr.json.errors[0] && cr.json.errors[0].parameters && cr.json.errors[0].parameters.find(pp => /duplicate/i.test(pp.name) && pp.value);
+    if (dup) {
+      const up = await ebayFetch(`/sell/account/v1/${kind}/${dup.value}`, { method: "PUT", token, body });
+      if (!up.ok && up.status !== 204) throw new Error(kind + " update(dup) failed: " + errText(up.json));
+      return dup.value;
+    }
+    throw new Error(kind + " create failed: " + errText(cr.json));
+  }
   return cr.json[idKey];
 }
 
