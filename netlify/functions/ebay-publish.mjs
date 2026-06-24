@@ -1,7 +1,7 @@
 // /.netlify/functions/ebay-publish  (POST)
 // Body: { sku, title, price, description, player, year, brand, set, cardNumber, variation, sport, team, isRookie, condition, imageUrl }
 // Runs eBay's real 3-step Sell/Inventory flow: create inventory item -> create offer -> publish offer.
-import { getAccessToken, ebayFetch, MARKETPLACE, uidFrom, store } from "../../ebay-lib.mjs";
+import { getAccessToken, ebayFetch, MARKETPLACE, uidFrom, store, ensurePromoCampaign, PROMO_BID } from "../../ebay-lib.mjs";
 
 const CURRENCY = process.env.EBAY_CURRENCY || "USD";
 
@@ -133,8 +133,20 @@ export default async (req) => {
   if (!pub.ok) { try { await store().delete(cfgKey); } catch {} return fail("eBay couldn't publish the listing: " + errText(pub.json), pub.json); }
 
   const listingId = pub.json.listingId;
+
+  // ---- 7. Promote the listing (Promoted Listings Standard, 13%) — best-effort ----
+  let promoted = false;
+  try {
+    const campaignId = await ensurePromoCampaign(token, uid);
+    if (campaignId && listingId) {
+      const ar = await ebayFetch(`/sell/marketing/v1/ad_campaign/${campaignId}/create_ads_by_listing_id`, { method: "POST", token, body: { bidPercentage: PROMO_BID, listingIds: [String(listingId)] } });
+      promoted = ar.ok;
+    }
+  } catch (e) {}
+
   return new Response(JSON.stringify({
     listingId,
+    promoted,
     url: listingId ? "https://www.ebay.com/itm/" + listingId : null,
     offerId,
   }), { headers: { "Content-Type": "application/json" } });

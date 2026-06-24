@@ -3862,6 +3862,17 @@ function ConnectSheet({
     } catch (e) { setPolMsg("Couldn't reach eBay. Try again."); }
     setPolBusy(false);
   };
+  const [promoMsg, setPromoMsg] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
+  const applyPromo = async () => {
+    setPromoBusy(true); setPromoMsg("");
+    try {
+      const r = await fetch("/.netlify/functions/ebay-promote-all?uid=" + encodeURIComponent(cfuid()), { method: "POST" });
+      const j = await r.json();
+      setPromoMsg(r.ok && j.ok ? ("Promoting " + (j.promoted + j.already) + " of " + j.listings + " listings at 13%." + (j.failed ? (" " + j.failed + " couldn't be promoted.") : "")) : ((j.detail || j.error || "Couldn't set up promotion.") + " If this mentions permission, tap Reconnect below."));
+    } catch (e) { setPromoMsg("Couldn't reach eBay."); }
+    setPromoBusy(false);
+  };
   return React.createElement("div", {
     className: "scrim",
     onClick: onClose
@@ -3899,6 +3910,15 @@ function ConnectSheet({
     onClick: applyPolicies,
     disabled: polBusy
   }, polBusy ? React.createElement(Loader2, { size: 15, className: "spin" }) : React.createElement(ShieldCheck, { size: 15 }), " ", polBusy ? "Setting policies…" : "Set listing policies (buyer-paid shipping, no returns)"), polMsg ? React.createElement("div", { className: "note", style: { marginTop: 10 } }, React.createElement("span", null, polMsg)) : null, React.createElement("button", {
+    className: "btn btn-money",
+    style: { marginTop: 10 },
+    onClick: applyPromo,
+    disabled: promoBusy
+  }, promoBusy ? React.createElement(Loader2, { size: 15, className: "spin" }) : React.createElement(Sparkles, { size: 15 }), " ", promoBusy ? "Setting up promotion…" : "Promote all listings (13%)"), promoMsg ? React.createElement("div", { className: "note", style: { marginTop: 10 } }, React.createElement("span", null, promoMsg)) : null, React.createElement("button", {
+    className: "btn btn-ghost",
+    style: { marginTop: 10 },
+    onClick: () => { window.location.href = EBAY.login; }
+  }, React.createElement(Link2, { size: 15 }), " Reconnect eBay (enable ads)"), React.createElement("button", {
     className: "btn btn-ghost",
     style: {
       marginTop: 12,

@@ -13,6 +13,7 @@ export const SCOPES = [
   "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.account",
+  "https://api.ebay.com/oauth/api_scope/sell.marketing",
 ].join(" ");
 
 function basicAuth() {
@@ -93,4 +94,30 @@ export function uidFrom(req) {
   } catch {
     return (req.headers && req.headers.get && req.headers.get("x-cf-uid")) || "";
   }
+}
+
+// Promoted Listings: ensure a standing 13% Cost-Per-Sale campaign exists for this seller.
+export const PROMO_BID = process.env.EBAY_PROMO_BID || "13.0";
+export async function ensurePromoCampaign(token, uid) {
+  const key = "ebay_promo:" + (uid || "");
+  const name = "CardFlip Promoted 13%";
+  try { const c = await store().get(key, { type: "json" }); if (c && c.campaignId) return c.campaignId; } catch {}
+  let id = "";
+  try {
+    const r = await ebayFetch(`/sell/marketing/v1/ad_campaign?limit=100`, { token });
+    const arr = (r.ok && r.json.campaigns) || [];
+    const ex = arr.find(c => c.campaignName === name);
+    if (ex) id = ex.campaignId;
+  } catch {}
+  if (!id) {
+    const body = { campaignName: name, fundingStrategy: { fundingModel: "COST_PER_SALE" }, marketplaceId: MARKETPLACE, startDate: new Date().toISOString() };
+    const cr = await ebayFetch(`/sell/marketing/v1/ad_campaign`, { method: "POST", token, body });
+    if (!cr.ok) throw new Error("campaign create failed: " + ((cr.json && cr.json.errors && cr.json.errors.map(e => e.longMessage || e.message).join("; ")) || JSON.stringify(cr.json)));
+    const r2 = await ebayFetch(`/sell/marketing/v1/ad_campaign?limit=100`, { token });
+    const arr2 = (r2.ok && r2.json.campaigns) || [];
+    const ex2 = arr2.find(c => c.campaignName === name);
+    id = ex2 ? ex2.campaignId : "";
+  }
+  if (id) { try { await store().setJSON(key, { campaignId: id }); } catch {} }
+  return id;
 }
