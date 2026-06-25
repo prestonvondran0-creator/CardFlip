@@ -67,6 +67,16 @@ export default async (req) => {
     }
     if (!fulfillmentId) throw new Error("shipping policy: " + lastShipErr);
 
+    // eBay Standard Envelope (cheap ~$1, tracked, buyer-paid) for low-value cards. Best-effort.
+    let eseFulfillmentId = "", eseErr = "";
+    try {
+      eseFulfillmentId = await getOrCreate(token, "fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId", "CardFlip Standard Envelope", {
+        name: "CardFlip Standard Envelope", marketplaceId: MARKETPLACE, categoryTypes: cat,
+        handlingTime: { value: 1, unit: "DAY" }, globalShipping: false, localPickup: false, freightShipping: false, pickupDropOff: false,
+        shippingOptions: [{ optionType: "DOMESTIC", costType: "FLAT_RATE", shippingServices: [{ sortOrder: 1, shippingCarrierCode: "USPS", shippingServiceCode: "US_eBayStandardEnvelope", freeShipping: false, shippingCost: { value: "1.25", currency: "USD" } }] }],
+      });
+    } catch (e) { eseErr = (e && e.message) || String(e); }
+
     let locationKey = "";
     try {
       const loc = await ebayFetch(`/sell/inventory/v1/location`, { token });
@@ -74,9 +84,9 @@ export default async (req) => {
     } catch {}
 
     // Pin these into the publish config cache so every listing uses them.
-    try { await store().setJSON("ebay_cfg:" + (uid || ""), { fulfillmentId, paymentId, returnId, locationKey }); } catch {}
+    try { await store().setJSON("ebay_cfg:" + (uid || ""), { fulfillmentId, eseFulfillmentId, paymentId, returnId, locationKey }); } catch {}
 
-    return json({ ok: true, fulfillmentId, paymentId, returnId, locationKey, pkgOz, shipMode });
+    return json({ ok: true, fulfillmentId, eseFulfillmentId, eseErr, paymentId, returnId, locationKey, pkgOz, shipMode });
   } catch (e) {
     return json({ error: "Couldn't set policies", detail: String(e && e.message || e) }, 500);
   }
