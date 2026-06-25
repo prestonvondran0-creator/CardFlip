@@ -49,10 +49,11 @@ export async function getAccessToken(uid) {
   if (!t || !t.refresh_token) throw new Error("eBay not connected");
   if (t.access_token && t.expires_at && Date.now() < t.expires_at - 60000) return t.access_token;
 
+  // Do NOT send scope on refresh: eBay returns a token with whatever scopes the refresh
+  // token was actually granted. Requesting scopes beyond the grant errors out ("scope exceeds granted").
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: t.refresh_token,
-    scope: SCOPES,
   });
   const r = await fetch(TOKEN_URL, {
     method: "POST",
