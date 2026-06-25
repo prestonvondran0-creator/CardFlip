@@ -14,6 +14,15 @@ function errText(json) {
   if (json && json.errors && json.errors.length) return json.errors.map((e) => e.message).join("; ");
   return JSON.stringify(json);
 }
+async function retryFetch(path, opts, tries = 3) {
+  let r;
+  for (let a = 0; a < tries; a++) {
+    r = await ebayFetch(path, opts);
+    if (r.ok || !(r.status >= 500 || r.status === 429 || r.status === 0)) return r;
+    await new Promise((res) => setTimeout(res, 700 * (a + 1)));
+  }
+  return r;
+}
 
 export default async (req) => {
   if (req.method !== "POST") return fail("Use POST");
@@ -105,7 +114,7 @@ export default async (req) => {
       ...(imageUrls.length ? { imageUrls } : {}),
     },
   };
-  const put = await ebayFetch(`/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, { method: "PUT", token, body: itemBody });
+  const put = await retryFetch(`/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, { method: "PUT", token, body: itemBody });
   if (!put.ok) return fail("eBay rejected the item: " + errText(put.json), put.json);
 
   // ---- 5. Create the offer ----
@@ -120,7 +129,7 @@ export default async (req) => {
     pricingSummary: { price: { value: price.toFixed(2), currency: CURRENCY } },
     merchantLocationKey: locationKey,
   };
-  const offer = await ebayFetch(`/sell/inventory/v1/offer`, { method: "POST", token, body: offerBody });
+  const offer = await retryFetch(`/sell/inventory/v1/offer`, { method: "POST", token, body: offerBody });
   let offerId = offer.json.offerId;
   if (!offer.ok) {
     // If an offer already exists for this SKU, eBay returns it in the error details.
@@ -129,7 +138,7 @@ export default async (req) => {
   }
 
   // ---- 6. Publish ----
-  const pub = await ebayFetch(`/sell/inventory/v1/offer/${offerId}/publish`, { method: "POST", token });
+  const pub = await retryFetch(`/sell/inventory/v1/offer/${offerId}/publish`, { method: "POST", token });
   if (!pub.ok) { try { await store().delete(cfgKey); } catch {} return fail("eBay couldn't publish the listing: " + errText(pub.json), pub.json); }
 
   const listingId = pub.json.listingId;
