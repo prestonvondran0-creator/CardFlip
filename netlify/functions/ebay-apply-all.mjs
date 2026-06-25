@@ -27,6 +27,9 @@ export default async (req) => {
     return json({ error: "Set your listing policies first (the Set listing policies button)." }, 400);
   }
   const target = { fulfillmentPolicyId: cfg.fulfillmentId, paymentPolicyId: cfg.paymentId, returnPolicyId: cfg.returnId };
+  const eseId = cfg.eseFulfillmentId || "";
+  const ESE_MAX = Number(url.searchParams.get("eseMax")) || 20;
+  const desiredFor = (price) => (eseId && Number(price) <= ESE_MAX) ? eseId : cfg.fulfillmentId;
 
   // 1. enumerate inventory item skus
   let items = [], offset = 0;
@@ -50,8 +53,10 @@ export default async (req) => {
       const pub = offers.find(o => o.status === "PUBLISHED" || o.listing || o.listingId);
       if (!pub || !pub.offerId) return null;
       const lp = pub.listingPolicies || {};
-      const ok = lp.fulfillmentPolicyId === target.fulfillmentPolicyId && lp.paymentPolicyId === target.paymentPolicyId && lp.returnPolicyId === target.returnPolicyId && lp.bestOfferTerms && lp.bestOfferTerms.bestOfferEnabled === true;
-      return { sku, offer: pub, ok };
+      const price = Number(pub.pricingSummary && pub.pricingSummary.price && pub.pricingSummary.price.value) || 0;
+      const wantFulfillment = desiredFor(price);
+      const ok = lp.fulfillmentPolicyId === wantFulfillment && lp.paymentPolicyId === target.paymentPolicyId && lp.returnPolicyId === target.returnPolicyId && lp.bestOfferTerms && lp.bestOfferTerms.bestOfferEnabled === true;
+      return { sku, offer: pub, ok, wantFulfillment };
     } catch (e) { return null; }
   });
   const live = found.filter(Boolean);
@@ -63,18 +68,17 @@ export default async (req) => {
   const failed = [];
   let updated = 0;
 
-  async function putOffer(offer) {
+  async function putOffer(offer, ff) {
     const body = { ...offer }; delete body.offerId; delete body.listing; delete body.status; delete body.listingId;
-    body.listingPolicies = { ...(body.listingPolicies || {}), ...target, bestOfferTerms: { bestOfferEnabled: true } };
+    body.listingPolicies = { paymentPolicyId: target.paymentPolicyId, returnPolicyId: target.returnPolicyId, fulfillmentPolicyId: ff, bestOfferTerms: { bestOfferEnabled: true } };
     return ebayFetch(`/sell/inventory/v1/offer/${offer.offerId}`, { method: "PUT", token, body });
   }
-  async function ensureWeight(sku) {
+  async function lightenWeight(sku) {
     try {
       const ir = await ebayFetch(`/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, { token });
       if (!ir.ok) return false;
       const item = ir.json || {};
-      if (item.packageWeightAndSize && item.packageWeightAndSize.weight) return true;
-      item.packageWeightAndSize = { packageType: "PACKAGE_THICK_ENVELOPE", weight: { value: 3, unit: "OUNCE" } };
+      item.packageWeightAndSize = { packageType: "LARGE_ENVELOPE", weight: { value: 1, unit: "OUNCE" } };
       delete item.sku; delete item.locale;
       const up = await ebayFetch(`/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, { method: "PUT", token, body: item });
       return up.ok;
@@ -83,10 +87,11 @@ export default async (req) => {
 
   await pool(todo, 6, async (x) => {
     try {
-      let r = await putOffer(x.offer);
-      if (!r.ok && /weight|dimension|calculat|shipping/i.test(errText(r.json))) {
-        await ensureWeight(x.sku);
-        r = await putOffer(x.offer);
+      await lightenWeight(x.sku);
+      let r = await putOffer(x.offer, x.wantFulfillment);
+      // if eBay Standard Envelope is rejected for this listing (e.g. value too high), fall back to calculated
+      if (!r.ok && r.status !== 204 && x.wantFulfillment === eseId) {
+        r = await putOffer(x.offer, cfg.fulfillmentId);
       }
       if (r.ok || r.status === 204) updated++;
       else failed.push({ sku: x.sku, err: errText(r.json) });

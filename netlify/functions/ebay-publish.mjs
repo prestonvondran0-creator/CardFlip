@@ -104,7 +104,7 @@ export default async (req) => {
 
   const itemBody = {
     availability: { shipToLocationAvailability: { quantity: 1 } },
-    packageWeightAndSize: { packageType: "PACKAGE_THICK_ENVELOPE", weight: { value: Number(process.env.EBAY_PKG_OZ || card.packageOz || 3), unit: "OUNCE" } },
+    packageWeightAndSize: { packageType: "LARGE_ENVELOPE", weight: { value: Number(process.env.EBAY_PKG_OZ || card.packageOz || 1), unit: "OUNCE" } },
     condition,
     ...(isLot ? {} : { conditionDescriptors: [{ name: "40001", values: [cardCondValueId] }] }),
     product: {
@@ -118,6 +118,9 @@ export default async (req) => {
   if (!put.ok) return fail("eBay rejected the item: " + errText(put.json), put.json);
 
   // ---- 5. Create the offer ----
+  const eseFulfillmentId = (cfg && cfg.eseFulfillmentId) || "";
+  const ESE_MAX = Number(process.env.EBAY_ESE_MAX || 20);
+  const chosenFulfillment = (eseFulfillmentId && !isLot && price <= ESE_MAX) ? eseFulfillmentId : fulfillmentId;
   const offerBody = {
     sku,
     marketplaceId: MARKETPLACE,
@@ -125,7 +128,7 @@ export default async (req) => {
     availableQuantity: 1,
     categoryId,
     listingDescription: card.description || title,
-    listingPolicies: { fulfillmentPolicyId: fulfillmentId, paymentPolicyId: paymentId, returnPolicyId: returnId, bestOfferTerms: { bestOfferEnabled: true } },
+    listingPolicies: { fulfillmentPolicyId: chosenFulfillment, paymentPolicyId: paymentId, returnPolicyId: returnId, bestOfferTerms: { bestOfferEnabled: true } },
     pricingSummary: { price: { value: price.toFixed(2), currency: CURRENCY } },
     merchantLocationKey: locationKey,
   };
